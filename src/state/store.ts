@@ -1,8 +1,31 @@
 import { create } from 'zustand'
 import { temporal } from 'zundo'
-import { emptyDesign, type Design } from '../model/types'
+import { emptyDesign, parseDesign, type Design } from '../model/types'
 import { initialConfig } from '../initialConfig'
 import { setSegmentLength, type Vec2 } from '../geometry/geometry'
+
+const STORAGE_KEY = 'sprinklers-plan:design'
+
+function loadSavedDesign(): Design | null {
+  try {
+    const text = localStorage.getItem(STORAGE_KEY)
+    return text ? parseDesign(text) : null
+  } catch {
+    return null
+  }
+}
+
+/** Write the current (or given) design to localStorage. */
+export function saveDesign(design?: Design) {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(design ?? useDesignStore.getState().design),
+    )
+  } catch {
+    // storage full or unavailable — nothing sensible to do
+  }
+}
 
 export type Mode = 'draw' | 'select'
 export type Selection =
@@ -32,11 +55,13 @@ const round3 = (v: number) => Math.round(v * 1000) / 1000
  * Document store. Only `design` is tracked by the zundo temporal middleware
  * (undo/redo); mode/selection/snap are ephemeral editor state.
  */
+const startDesign = loadSavedDesign() ?? initialConfig ?? emptyDesign()
+
 export const useDesignStore = create<EditorState>()(
   temporal(
     (set) => ({
-      design: initialConfig ?? emptyDesign(),
-      mode: initialConfig?.terrain.closed ? 'select' : 'draw',
+      design: startDesign,
+      mode: startDesign.terrain.closed ? 'select' : 'draw',
       selection: null,
       snap: true,
 
@@ -125,6 +150,14 @@ export const useDesignStore = create<EditorState>()(
 
 export const undo = () => useDesignStore.temporal.getState().undo()
 export const redo = () => useDesignStore.temporal.getState().redo()
+
+// Autosave: debounce design changes into localStorage so a reload never loses work.
+let autosaveTimer: ReturnType<typeof setTimeout> | undefined
+useDesignStore.subscribe((state, prev) => {
+  if (state.design === prev.design) return
+  clearTimeout(autosaveTimer)
+  autosaveTimer = setTimeout(() => saveDesign(state.design), 400)
+})
 
 /**
  * Group a burst of design mutations (e.g. every mousemove of a drag) into a

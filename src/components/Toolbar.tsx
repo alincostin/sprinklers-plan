@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useStore } from 'zustand'
-import { parseDesign } from '../model/types'
-import { redo, undo, useDesignStore } from '../state/store'
+import { emptyDesign, parseDesign } from '../model/types'
+import { redo, saveDesign, undo, useDesignStore } from '../state/store'
 
 /** Top toolbar: mode, snap, undo/redo, and JSON import/export/clipboard. */
 export function Toolbar() {
@@ -102,6 +102,26 @@ export function Toolbar() {
       </button>
 
       <span className="sep" />
+      <button
+        title="Designs autosave to this browser; Save forces it immediately"
+        onClick={() => {
+          saveDesign()
+          flash('Saved to this browser')
+        }}
+      >
+        Save
+      </button>
+      <button
+        title="Start a blank design (undoable)"
+        onClick={() => {
+          if (window.confirm('Start a new blank design? You can undo this.')) {
+            setDesign(emptyDesign())
+            flash('New design')
+          }
+        }}
+      >
+        New
+      </button>
       <button onClick={onExport}>Export</button>
       <button onClick={() => fileRef.current?.click()}>Import</button>
       <button onClick={onCopy}>Copy</button>

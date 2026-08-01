@@ -57,8 +57,11 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 - Per zone: total flow = sum of its heads' flows; compare against source capacity.
 - Warn visually (zone panel + canvas badge) when a zone's demand exceeds the source flow or the heads' required pressure exceeds the available pressure.
 
-### 3.5 Configuration as JSON — **Implemented**
+### 3.5 Configuration: persistence & JSON — **Implemented**
 
+- **Autosave to localStorage**: every design change is saved (debounced 400 ms) to the browser's localStorage and restored on reload, so work survives page refreshes and browser restarts. Restore precedence on startup: saved design → `initialConfig` → blank.
+- **Save** button forces an immediate localStorage write (autosave makes this mostly a reassurance button).
+- **New** button starts a blank design after confirmation; the reset itself is undoable.
 - **Export** the design to a `sprinkler-design.json` file.
 - **Import** a design from a `.json` file.
 - **Copy to clipboard** — so the JSON can be pasted elsewhere or embedded as the app's initial configuration.
