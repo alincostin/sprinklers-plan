@@ -197,7 +197,7 @@ export function Canvas() {
     if (!shift || !last) {
       if (!magnet) return { point: p, snapped: false }
       const m = magneticSnap(p, snapStep, threshold)
-      return { point: m, snapped: m.x !== p.x || m.y !== p.y }
+      return { point: m, snapped: m.x !== p.x && m.y !== p.y }
     }
     if (Math.abs(p.x - last.x) >= Math.abs(p.y - last.y)) {
       const sx = Math.round(p.x / snapStep) * snapStep
@@ -220,6 +220,7 @@ export function Canvas() {
     const drag = dragRef.current
     if (drag) {
       let target = p
+      let onSnapPosition = false
       if (e.shiftKey && drag.anchor && distance(drag.origin, drag.anchor) > 0) {
         target = projectOntoDirection(p, drag.anchor, {
           x: drag.origin.x - drag.anchor.x,
@@ -227,8 +228,10 @@ export function Canvas() {
         })
       } else if (snap && !e.altKey) {
         target = magneticSnap(p, snapStep, MAGNET_PX / view.scale)
+        // marker only when fully locked onto a grid intersection
+        onSnapPosition = target.x !== p.x && target.y !== p.y
       }
-      setDragSnapped(target.x !== p.x || target.y !== p.y)
+      setDragSnapped(onSnapPosition)
       movePoint(drag.id, target.x, target.y)
     }
   }
@@ -409,11 +412,11 @@ function SnapMarker({ p, scale }: { p: Vec2; scale: number }) {
     <circle
       cx={p.x}
       cy={p.y}
-      r={9 / scale}
+      r={5.5 / scale}
       fill="none"
       stroke="#16a34a"
-      strokeWidth={1.5 / scale}
-      strokeDasharray={`${3 / scale} ${3 / scale}`}
+      strokeWidth={1.25 / scale}
+      strokeDasharray={`${2.5 / scale} ${2.5 / scale}`}
       pointerEvents="none"
     />
   )
