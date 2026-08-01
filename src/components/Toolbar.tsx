@@ -81,10 +81,10 @@ export function Toolbar() {
         title={design.terrain.closed ? 'Terrain outline is already closed' : 'Add terrain points'}
         onClick={() => setMode('draw')}
       >
-        Draw
+        ✎ Draw
       </button>
       <button className={mode === 'select' ? 'active' : ''} onClick={() => setMode('select')}>
-        Select
+        ↖ Select
       </button>
 
       <span className="sep" />
