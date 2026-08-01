@@ -37,6 +37,7 @@ export function Canvas() {
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [cursor, setCursor] = useState<Vec2 | null>(null)
   const [spaceHeld, setSpaceHeld] = useState(false)
+  const [shiftHeld, setShiftHeld] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
 
   const spaceRef = useRef(false)
@@ -87,6 +88,7 @@ export function Canvas() {
   // Global keyboard: space (pan), arrows (nudge), Enter/Escape/Delete, undo/redo.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftHeld(true)
       if (isEditableTarget(e)) return
       if (e.key === ' ') {
         e.preventDefault()
@@ -112,7 +114,8 @@ export function Canvas() {
         return
       }
       if (e.key === 'Escape') {
-        s.select(null)
+        if (s.mode === 'draw') s.setMode('select')
+        else s.select(null)
         return
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && s.selection?.kind === 'point') {
@@ -143,6 +146,7 @@ export function Canvas() {
       }
     }
     const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftHeld(false)
       if (e.key === ' ') {
         spaceRef.current = false
         setSpaceHeld(false)
@@ -169,10 +173,23 @@ export function Canvas() {
         closeTerrain()
         return
       }
-      addTerrainPoint(snap ? snapToGrid(p, SNAP_STEP) : p)
+      addTerrainPoint(nextDrawPoint(p, e.shiftKey))
     } else {
       select(null)
     }
+  }
+
+  /**
+   * Where the next terrain point would land: Shift locks the new segment
+   * horizontal or vertical (whichever is closer), then snap applies to the
+   * free coordinate.
+   */
+  const nextDrawPoint = (p: Vec2, shift: boolean): Vec2 => {
+    const last = pts[pts.length - 1]
+    if (!shift || !last) return snap ? snapToGrid(p, SNAP_STEP) : p
+    const horizontal = Math.abs(p.x - last.x) >= Math.abs(p.y - last.y)
+    const t = snap ? snapToGrid(p, SNAP_STEP) : p
+    return horizontal ? { x: t.x, y: last.y } : { x: last.x, y: t.y }
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -305,21 +322,24 @@ export function Canvas() {
         ))}
 
         {/* preview segment while drawing */}
-        {mode === 'draw' && !closed && pts.length > 0 && cursor && !nearFirst && (
-          <>
-            <line
-              x1={pts[pts.length - 1].x}
-              y1={pts[pts.length - 1].y}
-              x2={cursor.x}
-              y2={cursor.y}
-              stroke="#16a34a"
-              strokeWidth={px(1.5)}
-              strokeDasharray={`${px(6)} ${px(4)}`}
-              pointerEvents="none"
-            />
-            <SegmentLabel a={pts[pts.length - 1]} b={cursor} scale={view.scale} emphasized />
-          </>
-        )}
+        {mode === 'draw' && !closed && pts.length > 0 && cursor && (() => {
+          const preview = nearFirst ? pts[0] : nextDrawPoint(cursor, shiftHeld)
+          return (
+            <>
+              <line
+                x1={pts[pts.length - 1].x}
+                y1={pts[pts.length - 1].y}
+                x2={preview.x}
+                y2={preview.y}
+                stroke="#16a34a"
+                strokeWidth={px(1.5)}
+                strokeDasharray={`${px(6)} ${px(4)}`}
+                pointerEvents="none"
+              />
+              <SegmentLabel a={pts[pts.length - 1]} b={preview} scale={view.scale} emphasized />
+            </>
+          )
+        })()}
 
         {/* points */}
         {pts.map((pt, i) => {

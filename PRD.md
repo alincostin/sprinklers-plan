@@ -26,13 +26,14 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 
 **Modes** (toolbar): **Draw** (add points; disabled once the outline is closed) and **Select** (edit points/segments).
 
-- Click on the canvas to place polygon vertices; while drawing, a dashed preview segment follows the cursor with its live distance. Close the outline by clicking the first point or pressing Enter (needs ≥ 3 points); the app then switches to Select mode and fills the polygon.
+- Click on the canvas to place polygon vertices; while drawing, a dashed preview segment follows the cursor with its live distance. Close the outline by clicking the first point or pressing Enter (needs ≥ 3 points); the app then switches to Select mode and fills the polygon. When hovering the first point to close, the preview snaps to it and shows the closing segment and its distance.
+- **Shift while drawing** locks the new segment to exactly horizontal or vertical (whichever is closer to the cursor); the preview segment shows the locked position, and snap still applies to the free coordinate.
 - **Segment length labels are always visible** on every segment and update live. While dragging a point, the labels of its two adjacent segments are highlighted.
 - **Drag points** with the mouse (Select mode). Snap-to-grid applies while dragging; holding **Shift** instead constrains the drag along the adjacent segment's direction so the line stays straight.
 - **Keyboard movement** of the selected point:
   - Arrow keys nudge by 0.1 m; **Ctrl (or Cmd) + arrows** = 1 m steps.
   - **Shift + arrows** keeps the line straight (movement projected onto the adjacent segment's direction).
-  - **Delete/Backspace** removes the selected point (reopens the outline if fewer than 3 points remain); **Escape** deselects.
+  - **Delete/Backspace** removes the selected point (reopens the outline if fewer than 3 points remain); **Escape** exits Draw mode (leaving the outline open), or deselects in Select mode.
 - **Segment dimension input** (inspector): selecting a segment shows its current length; typing a new value moves the segment's end point along the segment direction to the exact dimension.
 - **Inspector** also shows: selected point's X/Y as editable inputs (commit on Enter/blur), a delete button, terrain stats (point count, perimeter, area) when nothing is selected, and contextual keyboard-shortcut hints.
 - **Grid & navigation**: 1 m grid (bold every 5 m, coarsens to 5 m when zoomed far out), snap-to-grid toggle (**0.5 m**), mouse-wheel zoom anchored at the cursor, pan via Space + drag or middle-mouse drag.
