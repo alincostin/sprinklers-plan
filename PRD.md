@@ -40,6 +40,7 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 - **Segment dimension input** (inspector): selecting a segment shows its current length; typing a new value moves the segment's end point along the segment direction to the exact dimension.
 - **Inspector** also shows: selected point's X/Y as editable inputs (commit on Enter/blur), a delete button, terrain stats (point count, perimeter, area) when nothing is selected, and contextual keyboard-shortcut hints.
 - **Grid & navigation**: 1 m grid (bold every 5 m, coarsens to 5 m when zoomed far out), mouse-wheel zoom anchored at the cursor, pan via Space + drag or middle-mouse drag.
+- **Zoom limits follow the project unit**: minimum zoom is absolute (5 px/m, terrain overview); maximum zoom scales with the unit so 1 unit of the active measure can always be magnified to 400 px — switching to mm unlocks mm-level zoom, meters cap at 400 px/m, etc.
 - **Scale bar** (toggleable in the Project panel, on by default, persisted as a preference): a map-style bar in the canvas' bottom-left corner showing the largest "nice" round length (1 / 2 / 5 × 10ⁿ in the project unit) that fits ~150 px; it updates in real time as the zoom changes and hides when no nice length fits.
 - **Magnetic snap** (toggle): while **drawing**, each coordinate locks onto its nearest grid line when within ~8 screen pixels of it (per-axis; with Shift's H/V lock, the magnet applies to the free coordinate only). While **dragging**, movement is fully free and snapping happens on release, previewed by the dotted circle (see above). Holding **Alt/Option** disables all snapping for pixel-perfect freedom.
 - **Snap step is customizable**: an input in the Project panel with a preset dropdown that also accepts any typed value (disabled while snap is off); presets and display follow the project unit (for meters: 0.1 / 0.25 / 0.5 / 1 / 2 / 5; default 0.5 m). Snap on/off and the step persist in the browser as preferences.
@@ -135,6 +136,7 @@ Tunable constants for behaviors not exposed in the UI — change the value, rebu
 | `POINT_RADIUS` / `POINT_RADIUS_SELECTED` / `POINT_STROKE` | `src/components/Canvas.tsx` | 5 / 6.5 / 2 px | Point circle sizes (screen px, zoom-independent) |
 | `MAGNET_PX` | `src/components/Canvas.tsx` | 8 px | Capture radius of the magnetic snap and minimum spacing for the snap-grid layer |
 | `CLOSE_PX` | `src/components/Canvas.tsx` | 12 px | Click radius for closing the outline on the end point |
+| `ZOOM_MIN_PX_PER_M` / `ZOOM_MAX_PX_PER_UNIT` | `src/components/Canvas.tsx` | 5 / 400 px | Zoom-out floor (absolute) and zoom-in ceiling (per active unit) |
 | `UNITS` (per-unit `nudge`, `snapPresets`, `decimals`) | `src/units.ts` | see §3.6 | Arrow-nudge steps, snap presets, label precision per unit |
 | Autosave debounce | `src/state/store.ts` | 400 ms | Delay between a change and its localStorage write |
 | History `limit` | `src/state/store.ts` | 100 | Max undo entries |

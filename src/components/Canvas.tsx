@@ -14,6 +14,11 @@ import { UNITS, formatLength, fromUnit, type Unit } from '../units'
 const MAGNET_PX = 8
 const CLOSE_PX = 12
 
+/** Zoom limits: min is absolute (px per meter); max adapts to the project
+ * unit so 1 unit of the active measure can always be magnified to this size. */
+const ZOOM_MIN_PX_PER_M = 5
+const ZOOM_MAX_PX_PER_UNIT = 400
+
 /** Point circle sizes in screen px — tweak here to resize all editor points. */
 const POINT_RADIUS = 5
 const POINT_RADIUS_SELECTED = 6.5
@@ -91,8 +96,13 @@ export function Canvas() {
       const rect = svg.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
+      const maxScale =
+        ZOOM_MAX_PX_PER_UNIT / UNITS[useDesignStore.getState().design.unit].factor
       setView((v) => {
-        const scale = Math.min(400, Math.max(5, v.scale * Math.exp(-e.deltaY * 0.0015)))
+        const scale = Math.min(
+          maxScale,
+          Math.max(ZOOM_MIN_PX_PER_M, v.scale * Math.exp(-e.deltaY * 0.0015)),
+        )
         const wx = (mx - v.x) / v.scale
         const wy = (my - v.y) / v.scale
         return { scale, x: mx - wx * scale, y: my - wy * scale }
