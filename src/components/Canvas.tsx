@@ -13,6 +13,8 @@ import { UNITS, formatLength, fromUnit, type Unit } from '../units'
 
 const MAGNET_PX = 8
 const CLOSE_PX = 12
+/** Snap-grid lines render only when their on-screen spacing is at least this. */
+const SNAP_GRID_MIN_PX = 8
 
 /** Zoom limits are unit-independent: an absolute floor (px per meter) and a
  * ceiling of ZOOM_MAX_MAGNIFICATION × physical 1:1 scale (screen-calibrated).
@@ -558,7 +560,7 @@ function Grid({ view, size }: { view: View; size: { w: number; h: number } }) {
   const lines: React.ReactElement[] = []
 
   // Snap layer: faint green lines at the snap step, only when legible on screen.
-  if (snap && snapStep * view.scale >= 8) {
+  if (snap && snapStep * view.scale >= SNAP_GRID_MIN_PX) {
     const stroke = 'rgba(22,163,74,0.16)'
     const w = 1 / view.scale
     for (let k = Math.floor(minX / snapStep); k * snapStep <= maxX; k++) {

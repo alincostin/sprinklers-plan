@@ -26,9 +26,9 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 
 **Modes** (toolbar): **Draw** (add points; disabled once the outline is closed) and **Select** (edit points/segments).
 
-**Layout**: toolbar (modes, undo/redo, Save/New/Export/Import/Copy/Paste) on top; right sidebar with a **Project panel** (unit of measure, snap on/off, snap step — §3.6) above the selection **Inspector**.
+**Layout**: toolbar (modes, undo/redo, Save/New/Export/Import/Copy/Paste) on top; right sidebar with a **Project panel** (unit of measure — §3.6, snap on/off, snap step, scale-bar toggle, screen calibration) above the selection **Inspector**.
 
-- Click on the canvas to place polygon vertices; while drawing, a dashed preview segment follows the cursor with its live distance. Close the outline by clicking the first point or pressing Enter (needs ≥ 3 points); the app then switches to Select mode and fills the polygon. When hovering the first point to close, it fills green (same size as other points), and the preview snaps to it showing the closing segment and its distance.
+- Click on the canvas to place polygon vertices; while drawing, a dashed preview segment follows the cursor with its live distance. Close the outline by clicking the opposite end point (the first point when drawing forward) or pressing Enter (needs ≥ 3 points); the app then switches to Select mode and fills the polygon. When hovering the close-target point, it fills green (same size as other points), and the preview snaps to it showing the closing segment and its distance.
 - **Shift while drawing** locks the new segment to exactly horizontal or vertical (whichever is closer to the cursor); the preview segment shows the locked position, and snap still applies to the free coordinate.
 - **Draw from either end**: an open outline extends from its last point by default. Selecting the outline's *first* point and then entering Draw mode extends from that end instead (new points prepend). The close target is always the opposite end; the preview line follows the active end.
 - **Segment length labels are always visible** on every segment and update live. While dragging a point, the labels of its two adjacent segments are highlighted.
@@ -100,7 +100,7 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 
 - Toolbar buttons for Undo and Redo, disabled when the respective history is empty.
 - Keyboard: Ctrl/Cmd+Z (undo), Shift+Ctrl/Cmd+Z or Ctrl/Cmd+Y (redo).
-- Every document mutation is undoable; ephemeral editor state (selection, mode, snap, view) is not tracked.
+- Every document mutation is undoable; ephemeral editor state (selection, mode, view) and browser preferences (snap, snap step, scale bar, calibration) are not tracked.
 - A mouse drag is grouped into one undo step; history is capped at 100 entries.
 
 ## 4. Data model
@@ -135,7 +135,8 @@ Tunable constants for behaviors not exposed in the UI — change the value, rebu
 | Constant | Where | Default | Controls |
 |---|---|---|---|
 | `POINT_RADIUS` / `POINT_RADIUS_SELECTED` / `POINT_STROKE` | `src/components/Canvas.tsx` | 5 / 6.5 / 2 px | Point circle sizes (screen px, zoom-independent) |
-| `MAGNET_PX` | `src/components/Canvas.tsx` | 8 px | Capture radius of the magnetic snap and minimum spacing for the snap-grid layer |
+| `MAGNET_PX` | `src/components/Canvas.tsx` | 8 px | Capture radius of the magnetic snap |
+| `SNAP_GRID_MIN_PX` | `src/components/Canvas.tsx` | 8 px | Minimum on-screen spacing before the snap-grid layer renders |
 | `CLOSE_PX` | `src/components/Canvas.tsx` | 12 px | Click radius for closing the outline on the end point |
 | `ZOOM_MIN_PX_PER_M` / `ZOOM_MAX_MAGNIFICATION` | `src/components/Canvas.tsx` | 5 px / 10× | Zoom-out floor (absolute) and zoom-in ceiling (multiple of physical 1:1) |
 | `PHYSICAL_PX_PER_M` | `src/components/Canvas.tsx` | 96/2.54 × 100 | Nominal 1:1 life-size scale (CSS reference DPI), multiplied by the user's screen calibration |
