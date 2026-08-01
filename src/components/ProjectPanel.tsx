@@ -31,7 +31,7 @@ export function ProjectPanel() {
       <h3 style={{ margin: '0 0 8px' }}>Project</h3>
 
       <label style={row} title="All lengths display and edit in this unit; data is stored in meters">
-        <span style={{ width: 64 }}>Unit</span>
+        <span style={{ width: 76 }}>Unit</span>
         <select
           value={unit}
           style={{ fontSize: 13 }}
@@ -45,16 +45,8 @@ export function ProjectPanel() {
         </select>
       </label>
 
-      <label
-        style={row}
-        title="Magnetic: points lock onto the grid only when close to it; hold Alt to disable while dragging or drawing"
-      >
-        <span style={{ width: 64 }}>Snap</span>
-        <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />
-      </label>
-
-      <label style={row} title={`Snap grid step in ${UNITS[unit].label} — pick a preset or type any value`}>
-        <span style={{ width: 64 }}>Snap step</span>
+      <label style={row} title={`Grid size in ${UNITS[unit].label} — pick a preset or type any value`}>
+        <span style={{ width: 76 }}>Grid size</span>
         <input
           type="text"
           inputMode="decimal"
@@ -77,8 +69,16 @@ export function ProjectPanel() {
         <span style={{ color: '#6b7280' }}>{UNITS[unit].label}</span>
       </label>
 
+      <label
+        style={row}
+        title="Magnetic: points lock onto the grid only when close to it; hold Alt to disable while dragging or drawing"
+      >
+        <span style={{ width: 76 }}>Snap to grid</span>
+        <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />
+      </label>
+
       <label style={row} title="Map-style scale bar in the canvas corner, updating with zoom">
-        <span style={{ width: 64 }}>Scale bar</span>
+        <span style={{ width: 76 }}>Scale bar</span>
         <input
           type="checkbox"
           checked={showScale}
@@ -87,7 +87,7 @@ export function ProjectPanel() {
       </label>
 
       <label style={row} title="Match an on-screen credit card to a real one so 1:1 zoom is a true 1:1 on this monitor">
-        <span style={{ width: 64 }}>Screen</span>
+        <span style={{ width: 76 }}>Screen</span>
         <button onClick={() => setCalibrating(true)}>Calibrate…</button>
         {calibration !== 1 && (
           <span style={{ color: '#6b7280' }}>{Math.round(calibration * 100)}%</span>
