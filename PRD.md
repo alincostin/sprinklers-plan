@@ -9,7 +9,7 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 
 - **Client-only SPA** — no accounts, no backend. The whole design lives in browser state and is persisted as JSON.
 - **Deployment**: Vercel (static build).
-- **Units**: metric (meters, l/min, bar).
+- **Units**: length unit is configurable per project (mm / cm / m / in / ft, default m) — see §3.6; hydraulics use l/min and bar. Internally, all geometry is stored in meters.
 
 ## 2. Tech stack
 
@@ -32,14 +32,14 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 - **Segment length labels are always visible** on every segment and update live. While dragging a point, the labels of its two adjacent segments are highlighted.
 - **Drag points** with the mouse (Select mode). The magnetic snap (below) applies while dragging; holding **Shift** instead constrains the drag along the adjacent segment's direction so the line stays straight.
 - **Keyboard movement** of the selected point:
-  - Arrow keys nudge by 0.1 m; **Ctrl (or Cmd) + arrows** = 1 m steps.
+  - Arrow keys nudge by the small step of the project unit, **Ctrl (or Cmd) + arrows** by the large step (for meters: 0.1 m / 1 m; per-unit steps in §3.6).
   - **Shift + arrows** keeps the line straight (movement projected onto the adjacent segment's direction).
   - **Delete/Backspace** removes the selected point (reopens the outline if fewer than 3 points remain); **Escape** exits Draw mode (leaving the outline open), or deselects in Select mode.
 - **Segment dimension input** (inspector): selecting a segment shows its current length; typing a new value moves the segment's end point along the segment direction to the exact dimension.
 - **Inspector** also shows: selected point's X/Y as editable inputs (commit on Enter/blur), a delete button, terrain stats (point count, perimeter, area) when nothing is selected, and contextual keyboard-shortcut hints.
 - **Grid & navigation**: 1 m grid (bold every 5 m, coarsens to 5 m when zoomed far out), mouse-wheel zoom anchored at the cursor, pan via Space + drag or middle-mouse drag.
 - **Magnetic snap** (toggle): dragging and drawing are fully free; each coordinate locks onto its nearest grid line only when within ~8 screen pixels of it (per-axis, so you can slide along a grid line). Holding **Alt/Option** disables even that for pixel-perfect freedom. With Shift's H/V lock active, the magnet applies to the free coordinate only.
-- **Snap step is customizable**: a toolbar input with preset dropdown (0.1 / 0.25 / 0.5 / 1 / 2 / 5 m) that also accepts any typed value; default 0.5 m. Snap on/off and the step persist in the browser as preferences.
+- **Snap step is customizable**: a toolbar input with a preset dropdown that also accepts any typed value; presets and display follow the project unit (for meters: 0.1 / 0.25 / 0.5 / 1 / 2 / 5; default 0.5 m). Snap on/off and the step persist in the browser as preferences.
 - **Snap grid layer**: when snap is on, faint green lines are drawn at the snap step under the gray meter grid — but only while their on-screen spacing is ≥ 8 px, so a fine step doesn't flood a zoomed-out view. What you see in green is exactly where the magnet locks.
 - **Snap click-point marker**: a small dotted green circle marks the landing position only when it is a true snap position — both coordinates locked onto the snap grid (or, with Shift's H/V lock, the free coordinate locked). Sliding along a single grid line shows no marker. Applies while drawing (including the first point) and while dragging.
 - Coordinates are stored with 3-decimal (mm) precision; a drag is recorded as a **single undo step**.
@@ -76,7 +76,22 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 - Schema is versioned (`version` field); imports are validated and rejected with a message if invalid.
 - Actions give brief status feedback in the toolbar ("Saved to this browser", "Copied to clipboard", "Loaded from …", validation errors).
 
-### 3.6 Undo / Redo — **Implemented**
+### 3.6 Units — **Implemented**
+
+- **Project unit of measure** selectable in the toolbar: mm, cm, m, in, ft (default m). It is part of the design document (travels with export/import, undoable).
+- Once set, **everything displays and edits in that unit**: segment labels, the dimension input, point X/Y inputs, perimeter, snap-step input and its presets, and keyboard-shortcut hints.
+- **Input parsing** converts back: typing 250 with unit cm moves the point to 2.5 m internally. Geometry is always stored in meters, so switching units never changes the data.
+- **Areas** render in m² for metric units and ft² for imperial ones.
+- Per-unit arrow-nudge steps (small / Ctrl) and snap presets:
+  | Unit | Nudge | Ctrl nudge | Snap presets |
+  |---|---|---|---|
+  | mm | 1 | 10 | 10, 50, 100, 250, 500, 1000 |
+  | cm | 1 | 10 | 1, 5, 10, 25, 50, 100 |
+  | m | 0.1 | 1 | 0.1, 0.25, 0.5, 1, 2, 5 |
+  | in | 1 | 12 | 1, 2, 3, 6, 12, 24 |
+  | ft | 0.25 | 1 | 0.25, 0.5, 1, 2, 5, 10 |
+
+### 3.7 Undo / Redo — **Implemented**
 
 - Toolbar buttons for Undo and Redo, disabled when the respective history is empty.
 - Keyboard: Ctrl/Cmd+Z (undo), Shift+Ctrl/Cmd+Z or Ctrl/Cmd+Y (redo).
@@ -90,6 +105,7 @@ All coordinates in meters, world space (y grows downward, matching SVG). Persist
 ```json
 {
   "version": 1,
+  "unit": "m",
   "terrain": {
     "points": [{ "id": "p1", "x": 0, "y": 0 }],
     "closed": true
@@ -105,19 +121,33 @@ All coordinates in meters, world space (y grows downward, matching SVG). Persist
 }
 ```
 
-`sprinklers`, `pipes`, `zones` and `source` are part of the schema now but only used from M3–M5 onward.
+`sprinklers`, `pipes`, `zones` and `source` are part of the schema now but only used from M3–M5 onward. `unit` is the project's display/input unit (§3.6); coordinates stay meters regardless.
 
-## 5. Non-goals (v1)
+## 5. Configuration constants (code)
+
+Tunable constants for behaviors not exposed in the UI — change the value, rebuild, done:
+
+| Constant | Where | Default | Controls |
+|---|---|---|---|
+| `POINT_RADIUS` / `POINT_RADIUS_SELECTED` / `POINT_STROKE` | `src/components/Canvas.tsx` | 5 / 6.5 / 2 px | Point circle sizes (screen px, zoom-independent) |
+| `MAGNET_PX` | `src/components/Canvas.tsx` | 8 px | Capture radius of the magnetic snap and minimum spacing for the snap-grid layer |
+| `CLOSE_PX` | `src/components/Canvas.tsx` | 12 px | Click radius for closing the outline on the end point |
+| `UNITS` (per-unit `nudge`, `snapPresets`, `decimals`) | `src/units.ts` | see §3.6 | Arrow-nudge steps, snap presets, label precision per unit |
+| Autosave debounce | `src/state/store.ts` | 400 ms | Delay between a change and its localStorage write |
+| History `limit` | `src/state/store.ts` | 100 | Max undo entries |
+| `initialConfig` | `src/initialConfig.ts` | null | Built-in starting design (paste an exported JSON) |
+
+## 6. Non-goals (v1)
 
 - Automatic head placement / head-to-head coverage suggestions (candidate for v2).
 - Pipe diameter sizing and friction-loss calculations (v1 does simple flow/pressure budgeting).
 - Background image tracing (satellite/site plan) — candidate for v2.
 - Multi-user collaboration, accounts, server-side storage.
 
-## 6. Milestones
+## 7. Milestones
 
 1. ✅ **M1 — Scaffold & repo** (2026-08-01): Vite + React + TS scaffold, GitHub repo (`alincostin/sprinklers-plan`). Vercel connection pending (manual step in the Vercel dashboard).
-2. ✅ **M2 — Terrain editor** (2026-08-01): everything in §3.1, §3.5 and §3.6.
+2. ✅ **M2 — Terrain editor** (2026-08-01): everything in §3.1, §3.5, §3.6 and §3.7.
 3. **M3 — Sprinklers**: placement, radius/arc editing, coverage rendering.
 4. **M4 — Zones & pipes**: zone management, pipe drawing, length totals.
 5. **M5 — Hydraulics**: source configuration, per-zone flow/pressure validation and warnings.

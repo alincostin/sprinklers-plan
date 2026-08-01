@@ -1,5 +1,6 @@
 import { distance, polygonArea, segmentsOf } from '../geometry/geometry'
 import { useDesignStore } from '../state/store'
+import { UNITS, formatArea, formatLength, fromUnit, inputValue } from '../units'
 
 /** Right-side panel: properties of the selected point or segment. */
 export function Inspector() {
@@ -7,6 +8,8 @@ export function Inspector() {
   const selection = useDesignStore((s) => s.selection)
   const { movePoint, deletePoint, setSegmentLen } = useDesignStore.getState()
 
+  const unit = design.unit
+  const uLabel = UNITS[unit].label
   const pts = design.terrain.points
   const segments = segmentsOf(pts, design.terrain.closed)
 
@@ -18,15 +21,23 @@ export function Inspector() {
       {point ? (
         <>
           <h3 style={{ marginTop: 0 }}>Point</h3>
-          <NumberField label="X (m)" value={point.x} onCommit={(v) => movePoint(point.id, v, point.y)} />
-          <NumberField label="Y (m)" value={point.y} onCommit={(v) => movePoint(point.id, point.x, v)} />
+          <NumberField
+            label={`X (${uLabel})`}
+            value={inputValue(point.x, unit)}
+            onCommit={(v) => movePoint(point.id, fromUnit(v, unit), point.y)}
+          />
+          <NumberField
+            label={`Y (${uLabel})`}
+            value={inputValue(point.y, unit)}
+            onCommit={(v) => movePoint(point.id, point.x, fromUnit(v, unit))}
+          />
           <button style={{ marginTop: 12 }} onClick={() => deletePoint(point.id)}>
             Delete point
           </button>
           <ShortcutHints
             hints={[
-              ['Arrows', 'move 0.1 m'],
-              ['Ctrl + arrows', 'move 1 m'],
+              ['Arrows', `move ${UNITS[unit].nudge[0]} ${uLabel}`],
+              ['Ctrl + arrows', `move ${UNITS[unit].nudge[1]} ${uLabel}`],
               ['Shift', 'keep the line straight'],
               ['Alt + drag', 'ignore grid snap'],
               ['Delete', 'remove point'],
@@ -37,10 +48,10 @@ export function Inspector() {
         <>
           <h3 style={{ marginTop: 0 }}>Segment</h3>
           <NumberField
-            label="Length (m)"
-            value={round2(distance(segment[0], segment[1]))}
-            min={0.01}
-            onCommit={(v) => setSegmentLen(selection.index, v)}
+            label={`Length (${uLabel})`}
+            value={inputValue(distance(segment[0], segment[1]), unit)}
+            min={0.001}
+            onCommit={(v) => setSegmentLen(selection.index, fromUnit(v, unit))}
           />
           <p style={{ color: '#6b7280', fontSize: 13 }}>
             Typing a length moves the segment's end point along the segment direction.
@@ -53,8 +64,8 @@ export function Inspector() {
             {pts.length} point{pts.length === 1 ? '' : 's'}
             {design.terrain.closed && (
               <>
-                {' · '}perimeter {perimeter(segments).toFixed(2)} m{' · '}area{' '}
-                {polygonArea(pts).toFixed(1)} m²
+                {' · '}perimeter {formatLength(perimeter(segments), unit)}{' · '}area{' '}
+                {formatArea(polygonArea(pts), unit)}
               </>
             )}
           </p>
@@ -83,8 +94,6 @@ export function Inspector() {
   )
 }
 
-const round2 = (v: number) => Math.round(v * 100) / 100
-
 const perimeter = (segments: [{ x: number; y: number }, { x: number; y: number }][]) =>
   segments.reduce((sum, [a, b]) => sum + distance(a, b), 0)
 
@@ -107,7 +116,7 @@ function NumberField({
         key={value}
         type="number"
         defaultValue={value}
-        step={0.1}
+        step="any"
         min={min}
         style={{ display: 'block', width: '100%', marginTop: 2 }}
         onKeyDown={(e) => {

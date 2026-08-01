@@ -9,6 +9,7 @@ import {
 } from '../geometry/geometry'
 import { beginTransient, endTransient, redo, undo, useDesignStore } from '../state/store'
 import type { TerrainPoint } from '../model/types'
+import { UNITS, formatLength, fromUnit } from '../units'
 
 const MAGNET_PX = 8
 const CLOSE_PX = 12
@@ -150,7 +151,8 @@ export function Canvas() {
         const i = points.findIndex((p) => p.id === (s.selection as { id: string }).id)
         if (i < 0) return
         const pt = points[i]
-        const step = e.ctrlKey || e.metaKey ? 1 : 0.1
+        const nudge = UNITS[s.design.unit].nudge
+        const step = fromUnit(e.ctrlKey || e.metaKey ? nudge[1] : nudge[0], s.design.unit)
         let d = { x: dir.x * step, y: dir.y * step }
         if (e.shiftKey) {
           const anchor = neighborOf(points, i, s.design.terrain.closed)
@@ -443,6 +445,7 @@ function SegmentLabel({
   scale: number
   emphasized?: boolean
 }) {
+  const unit = useDesignStore((s) => s.design.unit)
   const d = distance(a, b)
   if (d === 0) return null
   // offset the label perpendicular to the segment so it doesn't sit on the line
@@ -460,7 +463,7 @@ function SegmentLabel({
       fontWeight={emphasized ? 600 : 400}
       pointerEvents="none"
     >
-      {d.toFixed(2)} m
+      {formatLength(d, unit)}
     </text>
   )
 }

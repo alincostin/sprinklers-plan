@@ -3,6 +3,7 @@ import { temporal } from 'zundo'
 import { emptyDesign, parseDesign, type Design } from '../model/types'
 import { initialConfig } from '../initialConfig'
 import { setSegmentLength, type Vec2 } from '../geometry/geometry'
+import type { Unit } from '../units'
 
 const STORAGE_KEY = 'sprinklers-plan:design'
 
@@ -59,6 +60,7 @@ interface EditorState {
   setMode: (mode: Mode) => void
   setSnap: (snap: boolean) => void
   setSnapStep: (snapStep: number) => void
+  setUnit: (unit: Unit) => void
   select: (selection: Selection | null) => void
   setDesign: (design: Design) => void
   commitDesign: (design: Design) => void
@@ -105,6 +107,7 @@ export const useDesignStore = create<EditorState>()(
       setSnapStep: (snapStep) => {
         if (snapStep > 0) set({ snapStep })
       },
+      setUnit: (unit) => set((s) => ({ design: { ...s.design, unit } })),
       select: (selection) => set({ selection }),
       setDesign: (design) =>
         set({

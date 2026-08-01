@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-const SNAP_PRESETS = [0.1, 0.25, 0.5, 1, 2, 5]
+import { useEffect, useRef, useState } from 'react'
+import { UNITS, UNIT_KEYS, fromUnit, inputValue, type Unit } from '../units'
 import { useStore } from 'zustand'
 import { emptyDesign, parseDesign } from '../model/types'
 import { redo, saveDesign, undo, useDesignStore } from '../state/store'
@@ -10,8 +10,14 @@ export function Toolbar() {
   const mode = useDesignStore((s) => s.mode)
   const snap = useDesignStore((s) => s.snap)
   const snapStep = useDesignStore((s) => s.snapStep)
-  const { setMode, setSnap, setSnapStep, setDesign } = useDesignStore.getState()
-  const [snapStepText, setSnapStepText] = useState(() => String(snapStep))
+  const unit = useDesignStore((s) => s.design.unit)
+  const { setMode, setSnap, setSnapStep, setUnit, setDesign } = useDesignStore.getState()
+  const [snapStepText, setSnapStepText] = useState(() => String(inputValue(snapStep, unit)))
+
+  // re-express the snap step when the project unit changes
+  useEffect(() => {
+    setSnapStepText(String(inputValue(useDesignStore.getState().snapStep, unit)))
+  }, [unit])
   const canUndo = useStore(useDesignStore.temporal, (s) => s.pastStates.length > 0)
   const canRedo = useStore(useDesignStore.temporal, (s) => s.futureStates.length > 0)
 
@@ -103,21 +109,32 @@ export function Toolbar() {
         list="snap-steps"
         value={snapStepText}
         disabled={!snap}
-        title="Snap grid step in meters — pick a preset or type any value"
+        title={`Snap grid step in ${UNITS[unit].label} — pick a preset or type any value`}
         style={{ width: 80, fontSize: 13 }}
         onChange={(e) => {
           setSnapStepText(e.target.value)
           const v = Number(e.target.value)
-          if (v > 0) setSnapStep(v)
+          if (v > 0) setSnapStep(fromUnit(v, unit))
         }}
-        onBlur={() => setSnapStepText(String(useDesignStore.getState().snapStep))}
+        onBlur={() => setSnapStepText(String(inputValue(useDesignStore.getState().snapStep, unit)))}
       />
       <datalist id="snap-steps">
-        {SNAP_PRESETS.map((v) => (
+        {UNITS[unit].snapPresets.map((v) => (
           <option key={v} value={v} />
         ))}
       </datalist>
-      <span style={{ fontSize: 13, color: '#6b7280' }}>m</span>
+      <select
+        value={unit}
+        title="Project unit of measure — all lengths display and edit in this unit"
+        style={{ fontSize: 13 }}
+        onChange={(e) => setUnit(e.target.value as Unit)}
+      >
+        {UNIT_KEYS.map((u) => (
+          <option key={u} value={u}>
+            {u}
+          </option>
+        ))}
+      </select>
 
       <span className="sep" />
       <button disabled={!canUndo} onClick={() => undo()}>

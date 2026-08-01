@@ -1,3 +1,5 @@
+import { UNITS, type Unit } from '../units'
+
 export interface TerrainPoint {
   id: string
   x: number
@@ -38,9 +40,14 @@ export interface WaterSource {
   pressure: number
 }
 
-/** The persisted design document. All coordinates in meters. */
+/**
+ * The persisted design document. All coordinates are stored in meters
+ * regardless of `unit` — the unit only drives display and input parsing.
+ */
 export interface Design {
   version: 1
+  /** preferred unit of measure for the whole project */
+  unit: Unit
   terrain: { points: TerrainPoint[]; closed: boolean }
   sprinklers: Sprinkler[]
   pipes: Pipe[]
@@ -50,6 +57,7 @@ export interface Design {
 
 export const emptyDesign = (): Design => ({
   version: 1,
+  unit: 'm',
   terrain: { points: [], closed: false },
   sprinklers: [],
   pipes: [],
@@ -66,6 +74,7 @@ export function parseDesign(text: string): Design {
   return {
     ...emptyDesign(),
     ...raw,
+    unit: raw.unit in UNITS ? raw.unit : 'm',
     terrain: { points: raw.terrain.points, closed: !!raw.terrain.closed },
   }
 }
