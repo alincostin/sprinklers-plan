@@ -41,6 +41,7 @@ export function Canvas() {
   const [shiftHeld, setShiftHeld] = useState(false)
   const [altHeld, setAltHeld] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dragSnapped, setDragSnapped] = useState(false)
 
   const spaceRef = useRef(false)
   const panRef = useRef<{ cx: number; cy: number; vx: number; vy: number } | null>(null)
@@ -177,7 +178,7 @@ export function Canvas() {
         closeTerrain()
         return
       }
-      addTerrainPoint(nextDrawPoint(p, e.shiftKey, e.altKey))
+      addTerrainPoint(nextDrawPoint(p, e.shiftKey, e.altKey).point)
     } else {
       select(null)
     }
@@ -186,19 +187,26 @@ export function Canvas() {
   /**
    * Where the next terrain point would land: Shift locks the new segment
    * horizontal or vertical (whichever is closer); magnetic snap pulls onto
-   * the grid only when near it, and Alt disables it entirely.
+   * the grid only when near it, and Alt disables it entirely. `snapped`
+   * reports whether the magnet moved the point (drives the click-point marker).
    */
-  const nextDrawPoint = (p: Vec2, shift: boolean, alt: boolean): Vec2 => {
+  const nextDrawPoint = (p: Vec2, shift: boolean, alt: boolean): { point: Vec2; snapped: boolean } => {
     const magnet = snap && !alt
     const threshold = MAGNET_PX / view.scale
     const last = pts[pts.length - 1]
-    if (!shift || !last) return magnet ? magneticSnap(p, snapStep, threshold) : p
+    if (!shift || !last) {
+      if (!magnet) return { point: p, snapped: false }
+      const m = magneticSnap(p, snapStep, threshold)
+      return { point: m, snapped: m.x !== p.x || m.y !== p.y }
+    }
     if (Math.abs(p.x - last.x) >= Math.abs(p.y - last.y)) {
       const sx = Math.round(p.x / snapStep) * snapStep
-      return { x: magnet && Math.abs(sx - p.x) <= threshold ? sx : p.x, y: last.y }
+      const engaged = magnet && Math.abs(sx - p.x) <= threshold
+      return { point: { x: engaged ? sx : p.x, y: last.y }, snapped: engaged }
     }
     const sy = Math.round(p.y / snapStep) * snapStep
-    return { x: last.x, y: magnet && Math.abs(sy - p.y) <= threshold ? sy : p.y }
+    const engaged = magnet && Math.abs(sy - p.y) <= threshold
+    return { point: { x: last.x, y: engaged ? sy : p.y }, snapped: engaged }
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -220,6 +228,7 @@ export function Canvas() {
       } else if (snap && !e.altKey) {
         target = magneticSnap(p, snapStep, MAGNET_PX / view.scale)
       }
+      setDragSnapped(target.x !== p.x || target.y !== p.y)
       movePoint(drag.id, target.x, target.y)
     }
   }
@@ -229,6 +238,7 @@ export function Canvas() {
     if (dragRef.current) {
       dragRef.current = null
       setDraggingId(null)
+      setDragSnapped(false)
       endTransient()
     }
   }
@@ -331,23 +341,36 @@ export function Canvas() {
         ))}
 
         {/* preview segment while drawing */}
-        {mode === 'draw' && !closed && pts.length > 0 && cursor && (() => {
-          const preview = nearFirst ? pts[0] : nextDrawPoint(cursor, shiftHeld, altHeld)
+        {mode === 'draw' && !closed && cursor && (() => {
+          const { point: preview, snapped } = nearFirst
+            ? { point: pts[0], snapped: false }
+            : nextDrawPoint(cursor, shiftHeld, altHeld)
           return (
             <>
-              <line
-                x1={pts[pts.length - 1].x}
-                y1={pts[pts.length - 1].y}
-                x2={preview.x}
-                y2={preview.y}
-                stroke="#16a34a"
-                strokeWidth={px(1.5)}
-                strokeDasharray={`${px(6)} ${px(4)}`}
-                pointerEvents="none"
-              />
-              <SegmentLabel a={pts[pts.length - 1]} b={preview} scale={view.scale} emphasized />
+              {pts.length > 0 && (
+                <>
+                  <line
+                    x1={pts[pts.length - 1].x}
+                    y1={pts[pts.length - 1].y}
+                    x2={preview.x}
+                    y2={preview.y}
+                    stroke="#16a34a"
+                    strokeWidth={px(1.5)}
+                    strokeDasharray={`${px(6)} ${px(4)}`}
+                    pointerEvents="none"
+                  />
+                  <SegmentLabel a={pts[pts.length - 1]} b={preview} scale={view.scale} emphasized />
+                </>
+              )}
+              {snapped && <SnapMarker p={preview} scale={view.scale} />}
             </>
           )
+        })()}
+
+        {/* snap indicator around a magnet-locked dragged point */}
+        {draggingId && dragSnapped && (() => {
+          const pt = pts.find((p) => p.id === draggingId)
+          return pt ? <SnapMarker p={pt} scale={view.scale} /> : null
         })()}
 
         {/* points */}
@@ -378,6 +401,22 @@ function neighborOf(points: TerrainPoint[], i: number, closed: boolean): Vec2 | 
   if (i > 0) return points[i - 1]
   if (closed) return points[points.length - 1]
   return points[1] ?? null
+}
+
+/** Dotted circle marking a magnet-locked position (the point will land here). */
+function SnapMarker({ p, scale }: { p: Vec2; scale: number }) {
+  return (
+    <circle
+      cx={p.x}
+      cy={p.y}
+      r={9 / scale}
+      fill="none"
+      stroke="#16a34a"
+      strokeWidth={1.5 / scale}
+      strokeDasharray={`${3 / scale} ${3 / scale}`}
+      pointerEvents="none"
+    />
+  )
 }
 
 function SegmentLabel({

@@ -40,6 +40,7 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 - **Magnetic snap** (toggle): dragging and drawing are fully free; each coordinate locks onto its nearest grid line only when within ~8 screen pixels of it (per-axis, so you can slide along a grid line). Holding **Alt/Option** disables even that for pixel-perfect freedom. With Shift's H/V lock active, the magnet applies to the free coordinate only.
 - **Snap step is customizable**: a toolbar input with preset dropdown (0.1 / 0.25 / 0.5 / 1 / 2 / 5 m) that also accepts any typed value; default 0.5 m. Snap on/off and the step persist in the browser as preferences.
 - **Snap grid layer**: when snap is on, faint green lines are drawn at the snap step under the gray meter grid — but only while their on-screen spacing is ≥ 8 px, so a fine step doesn't flood a zoomed-out view. What you see in green is exactly where the magnet locks.
+- **Snap click-point marker**: whenever the magnet has grabbed the cursor, a dotted green circle marks the exact position the point will land — while drawing (including the first point) and while dragging.
 - Coordinates are stored with 3-decimal (mm) precision; a drag is recorded as a **single undo step**.
 
 ### 3.2 Sprinkler placement & coverage — **Planned (M3)**
