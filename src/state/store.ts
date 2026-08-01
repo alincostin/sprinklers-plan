@@ -34,6 +34,7 @@ interface Prefs {
   snap?: boolean
   snapStep?: number
   showScale?: boolean
+  calibration?: number
 }
 
 function loadPrefs(): Prefs {
@@ -61,6 +62,9 @@ interface EditorState {
   /** show the map-style scale bar on the canvas */
   showScale: boolean
   setShowScale: (showScale: boolean) => void
+  /** screen calibration: actual-to-nominal CSS pixel ratio (1 = trust CSS 96dpi) */
+  calibration: number
+  setCalibration: (calibration: number) => void
   setMode: (mode: Mode) => void
   setSnap: (snap: boolean) => void
   setSnapStep: (snapStep: number) => void
@@ -95,6 +99,13 @@ export const useDesignStore = create<EditorState>()(
       drawFrom: 'end',
       showScale: startPrefs.showScale ?? true,
       setShowScale: (showScale) => set({ showScale }),
+      calibration:
+        startPrefs.calibration && startPrefs.calibration > 0.3 && startPrefs.calibration < 3
+          ? startPrefs.calibration
+          : 1,
+      setCalibration: (calibration) => {
+        if (calibration > 0.3 && calibration < 3) set({ calibration })
+      },
 
       // Entering Draw with the first point of an open outline selected
       // extends the outline from that end (points are prepended).
@@ -211,12 +222,18 @@ useDesignStore.subscribe((state, prev) => {
   if (
     state.snap !== prev.snap ||
     state.snapStep !== prev.snapStep ||
-    state.showScale !== prev.showScale
+    state.showScale !== prev.showScale ||
+    state.calibration !== prev.calibration
   ) {
     try {
       localStorage.setItem(
         PREFS_KEY,
-        JSON.stringify({ snap: state.snap, snapStep: state.snapStep, showScale: state.showScale }),
+        JSON.stringify({
+          snap: state.snap,
+          snapStep: state.snapStep,
+          showScale: state.showScale,
+          calibration: state.calibration,
+        }),
       )
     } catch {
       // storage unavailable

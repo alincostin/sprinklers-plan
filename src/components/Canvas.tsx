@@ -14,13 +14,22 @@ import { UNITS, formatLength, fromUnit, type Unit } from '../units'
 const MAGNET_PX = 8
 const CLOSE_PX = 12
 
-/** Zoom limits: min is absolute (px per meter); max is the smaller of
- * "1 active unit magnified to this many px" and 1:1 physical scale. */
+/** Zoom limits: min is absolute (px per meter). Max: a unit larger than a
+ * centimeter may reach 1:1 physical scale; a smaller unit (mm) may be
+ * magnified until 1 unit spans one physical centimeter (10x for mm) — all
+ * within the 400 px-per-unit ceiling and scaled by the screen calibration. */
 const ZOOM_MIN_PX_PER_M = 5
 const ZOOM_MAX_PX_PER_UNIT = 400
-/** CSS anchors 1in ≡ 96px, so this is one on-screen "physical" meter. The
- * 1:1 cap guarantees the scale bar never shows a length larger than life. */
+/** CSS anchors 1in ≡ 96px, so this is one on-screen "physical" meter at
+ * nominal calibration. */
 const PHYSICAL_PX_PER_M = (96 / 2.54) * 100
+
+/** Max zoom (px per meter) for a unit, honoring the user's screen calibration. */
+function maxZoomFor(unitFactor: number, calibration: number): number {
+  const physical = PHYSICAL_PX_PER_M * calibration
+  const oneUnitPerPhysicalCm = (physical * 0.01) / unitFactor
+  return Math.min(ZOOM_MAX_PX_PER_UNIT / unitFactor, Math.max(physical, oneUnitPerPhysicalCm))
+}
 
 /** Point circle sizes in screen px — tweak here to resize all editor points. */
 const POINT_RADIUS = 5
@@ -91,10 +100,11 @@ export function Canvas() {
     return () => ro.disconnect()
   }, [])
 
-  // Re-clamp the zoom when the unit changes (its ceiling may be lower),
-  // anchored at the viewport center to avoid a jarring wheel-time snap.
+  // Re-clamp the zoom when the unit or calibration changes (the ceiling may
+  // be lower), anchored at the viewport center to avoid a jarring snap.
+  const calibration = useDesignStore((s) => s.calibration)
   useEffect(() => {
-    const maxScale = Math.min(ZOOM_MAX_PX_PER_UNIT / UNITS[unit].factor, PHYSICAL_PX_PER_M)
+    const maxScale = maxZoomFor(UNITS[unit].factor, calibration)
     setView((v) => {
       if (v.scale <= maxScale) return v
       const cx = size.w / 2
@@ -103,7 +113,7 @@ export function Canvas() {
       const wy = (cy - v.y) / v.scale
       return { scale: maxScale, x: cx - wx * maxScale, y: cy - wy * maxScale }
     })
-  }, [unit, size.w, size.h])
+  }, [unit, calibration, size.w, size.h])
 
   // Wheel zoom anchored at the cursor (non-passive so we can preventDefault).
   useEffect(() => {
@@ -113,10 +123,8 @@ export function Canvas() {
       const rect = svg.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
-      const maxScale = Math.min(
-        ZOOM_MAX_PX_PER_UNIT / UNITS[useDesignStore.getState().design.unit].factor,
-        PHYSICAL_PX_PER_M,
-      )
+      const s = useDesignStore.getState()
+      const maxScale = maxZoomFor(UNITS[s.design.unit].factor, s.calibration)
       setView((v) => {
         const scale = Math.min(
           maxScale,

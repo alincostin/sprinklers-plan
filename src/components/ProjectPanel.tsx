@@ -16,8 +16,10 @@ export function ProjectPanel() {
   const snap = useDesignStore((s) => s.snap)
   const snapStep = useDesignStore((s) => s.snapStep)
   const showScale = useDesignStore((s) => s.showScale)
+  const calibration = useDesignStore((s) => s.calibration)
   const { setUnit, setSnap, setSnapStep, setShowScale } = useDesignStore.getState()
   const [stepText, setStepText] = useState(() => String(inputValue(snapStep, unit)))
+  const [calibrating, setCalibrating] = useState(false)
 
   // re-express the snap step when the project unit changes
   useEffect(() => {
@@ -83,6 +85,92 @@ export function ProjectPanel() {
           onChange={(e) => setShowScale(e.target.checked)}
         />
       </label>
+
+      <label style={row} title="Match an on-screen credit card to a real one so 1:1 zoom is a true 1:1 on this monitor">
+        <span style={{ width: 64 }}>Screen</span>
+        <button onClick={() => setCalibrating(true)}>Calibrate…</button>
+        {calibration !== 1 && (
+          <span style={{ color: '#6b7280' }}>{Math.round(calibration * 100)}%</span>
+        )}
+      </label>
+
+      {calibrating && <CalibrationOverlay onClose={() => setCalibrating(false)} />}
     </section>
+  )
+}
+
+/** ISO/IEC 7810 ID-1 credit card: 85.60 x 53.98 mm. */
+const CARD_W_MM = 85.6
+const CARD_H_MM = 53.98
+const NOMINAL_PX_PER_MM = 96 / 25.4
+
+function CalibrationOverlay({ onClose }: { onClose: () => void }) {
+  const calibration = useDesignStore((s) => s.calibration)
+  const { setCalibration } = useDesignStore.getState()
+  const w = CARD_W_MM * NOMINAL_PX_PER_MM * calibration
+  const h = CARD_H_MM * NOMINAL_PX_PER_MM * calibration
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.35)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 10,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: '#fff',
+          borderRadius: 8,
+          padding: 24,
+          maxWidth: 520,
+          textAlign: 'center',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 style={{ marginTop: 0 }}>Screen calibration</h3>
+        <p style={{ fontSize: 13, color: '#374151' }}>
+          Hold a credit card against the screen and adjust the slider until the outline matches
+          its real size. This makes 1:1 zoom a true 1:1 on this monitor.
+        </p>
+        <div
+          style={{
+            width: w,
+            height: h,
+            border: '2px solid #16a34a',
+            borderRadius: 12,
+            margin: '16px auto',
+            background: 'rgba(34,197,94,0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#6b7280',
+            fontSize: 12,
+          }}
+        >
+          credit card (85.60 × 53.98 mm)
+        </div>
+        <input
+          type="range"
+          min={0.7}
+          max={1.5}
+          step={0.005}
+          value={calibration}
+          style={{ width: '100%' }}
+          onChange={(e) => setCalibration(Number(e.target.value))}
+        />
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+          <span style={{ fontSize: 13, color: '#6b7280', alignSelf: 'center' }}>
+            {Math.round(calibration * 100)}%
+          </span>
+          <button onClick={() => setCalibration(1)}>Reset</button>
+          <button onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
   )
 }
