@@ -39,6 +39,28 @@ interface View {
   scale: number // pixels per meter
 }
 
+/** Pan/zoom persist per browser so a reload restores the same view. */
+const VIEW_KEY = 'sprinklers-plan:view'
+const DEFAULT_VIEW: View = { x: 80, y: 80, scale: 40 }
+
+function loadView(): View {
+  try {
+    const v = JSON.parse(localStorage.getItem(VIEW_KEY) ?? '')
+    if (
+      Number.isFinite(v?.x) &&
+      Number.isFinite(v?.y) &&
+      Number.isFinite(v?.scale) &&
+      v.scale >= ZOOM_MIN_PX_PER_M
+    ) {
+      // over-ceiling scales are re-clamped by the calibration effect on mount
+      return { x: v.x, y: v.y, scale: v.scale }
+    }
+  } catch {
+    // fall through to default
+  }
+  return DEFAULT_VIEW
+}
+
 const isEditableTarget = (e: KeyboardEvent) => {
   const t = e.target as HTMLElement | null
   return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
@@ -67,7 +89,7 @@ export function Canvas() {
   const { addTerrainPoint, closeTerrain, movePoint, select } = useDesignStore.getState()
 
   const svgRef = useRef<SVGSVGElement>(null)
-  const [view, setView] = useState<View>({ x: 80, y: 80, scale: 40 })
+  const [view, setView] = useState<View>(loadView)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [cursor, setCursor] = useState<Vec2 | null>(null)
   const [spaceHeld, setSpaceHeld] = useState(false)
@@ -121,6 +143,18 @@ export function Canvas() {
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+
+  // Persist the view (debounced — pans/zooms arrive in bursts).
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(VIEW_KEY, JSON.stringify(view))
+      } catch {
+        // storage unavailable
+      }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [view])
 
   // Re-clamp the zoom if a calibration change lowers the ceiling, anchored
   // at the viewport center to avoid a jarring snap on the next wheel tick.
@@ -311,7 +345,89 @@ export function Canvas() {
     return { point: { x: last.x + u * ux, y: last.y + u * uy }, snapped: engaged }
   }
 
+  /**
+   * Move the dragged point to follow world position `p`. Shared by the pointer
+   * handler and the auto-pan tick (which has no pointer event, hence explicit
+   * modifiers). Reads snap settings via getState() so it is closure-safe when
+   * called from a stale rAF callback.
+   */
+  const applyDragMove = (p: Vec2, shift: boolean, alt: boolean, scale: number) => {
+    const drag = dragRef.current
+    if (!drag) return
+    const s = useDesignStore.getState()
+    // The point follows the cursor freely; a nearby snap intersection is
+    // only marked as a candidate (dotted circle) and applied on release.
+    let target = p
+    let candidate: Vec2 | null = null
+    if (shift && drag.anchor && distance(drag.origin, drag.anchor) > 0) {
+      target = projectOntoDirection(p, drag.anchor, {
+        x: drag.origin.x - drag.anchor.x,
+        y: drag.origin.y - drag.anchor.y,
+      })
+    } else if (s.snap && s.showGrid && !alt) {
+      const m = magneticSnap(p, s.snapStep, MAGNET_PX / scale)
+      if (m.x !== p.x && m.y !== p.y) candidate = m
+    }
+    dragSnapRef.current = candidate
+    setDragSnap(candidate)
+    movePoint(drag.id, target.x, target.y)
+  }
+
+  // Auto-pan only helps gestures that place or move geometry: drawing an open
+  // outline (hover) or dragging a point. Manual pan always wins.
+  const autoPanEligible = (): boolean => {
+    if (panRef.current || spaceRef.current) return false
+    if (dragRef.current) return true
+    if (!pointerRef.current) return false // pointer left the canvas
+    const s = useDesignStore.getState()
+    return s.mode === 'draw' && !s.design.terrain.closed
+  }
+
+  const autoPanTick = (t: number) => {
+    rafRef.current = null
+    const ptr = pointerRef.current
+    const svg = svgRef.current
+    if (!ptr || !svg || !autoPanEligible()) return
+    const rect = svg.getBoundingClientRect()
+    const vx = edgeFactor(ptr.clientX, rect.left, rect.right) * EDGE_PAN_MAX_SPEED
+    const vy = edgeFactor(ptr.clientY, rect.top, rect.bottom) * EDGE_PAN_MAX_SPEED
+    if (vx === 0 && vy === 0) return // cursor left the hot band — loop dies
+    const dt = Math.min((t - lastTickRef.current) / 1000, 0.05) // clamp tab-switch gaps
+    lastTickRef.current = t
+    const v = viewRef.current
+    const next = { ...v, x: v.x - vx * dt, y: v.y - vy * dt }
+    viewRef.current = next
+    setView(next)
+    // The world position under the (edge-clamped) frozen pointer changed:
+    // refresh the draw preview and, when dragging, the point itself.
+    const cx = Math.min(Math.max(ptr.clientX, rect.left), rect.right)
+    const cy = Math.min(Math.max(ptr.clientY, rect.top), rect.bottom)
+    const p = {
+      x: (cx - rect.left - next.x) / next.scale,
+      y: (cy - rect.top - next.y) / next.scale,
+    }
+    setCursor(p)
+    if (dragRef.current) applyDragMove(p, modRef.current.shift, modRef.current.alt, next.scale)
+    rafRef.current = requestAnimationFrame(autoPanTick)
+  }
+
+  /** Arm the auto-pan loop; idempotent, the tick itself decides whether to run. */
+  const scheduleAutoPan = () => {
+    if (rafRef.current !== null) return
+    lastTickRef.current = performance.now()
+    rafRef.current = requestAnimationFrame(autoPanTick)
+  }
+
+  useEffect(
+    () => () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+    },
+    [],
+  )
+
   const onPointerMove = (e: React.PointerEvent) => {
+    pointerRef.current = { clientX: e.clientX, clientY: e.clientY }
+    modRef.current = { shift: e.shiftKey, alt: e.altKey }
     if (panRef.current) {
       const pan = panRef.current
       setView((v) => ({ ...v, x: pan.vx + e.clientX - pan.cx, y: pan.vy + e.clientY - pan.cy }))
@@ -319,25 +435,8 @@ export function Canvas() {
     }
     const p = toWorld(e)
     setCursor(p)
-    const drag = dragRef.current
-    if (drag) {
-      // The point follows the cursor freely; a nearby snap intersection is
-      // only marked as a candidate (dotted circle) and applied on release.
-      let target = p
-      let candidate: Vec2 | null = null
-      if (e.shiftKey && drag.anchor && distance(drag.origin, drag.anchor) > 0) {
-        target = projectOntoDirection(p, drag.anchor, {
-          x: drag.origin.x - drag.anchor.x,
-          y: drag.origin.y - drag.anchor.y,
-        })
-      } else if (snapActive && !e.altKey) {
-        const m = magneticSnap(p, snapStep, MAGNET_PX / view.scale)
-        if (m.x !== p.x && m.y !== p.y) candidate = m
-      }
-      dragSnapRef.current = candidate
-      setDragSnap(candidate)
-      movePoint(drag.id, target.x, target.y)
-    }
+    applyDragMove(p, e.shiftKey, e.altKey, view.scale)
+    scheduleAutoPan()
   }
 
   const onPointerUp = () => {
@@ -369,6 +468,10 @@ export function Canvas() {
     }
     setDraggingId(pt.id)
     ;(e.target as Element).setPointerCapture(e.pointerId)
+    // the grabbed point may already sit in the edge band
+    pointerRef.current = { clientX: e.clientX, clientY: e.clientY }
+    modRef.current = { shift: e.shiftKey, alt: e.altKey }
+    scheduleAutoPan()
   }
 
   const px = (v: number) => v / view.scale // screen-constant size in world units
@@ -398,7 +501,14 @@ export function Canvas() {
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerLeave={() => setCursor(null)}
+      onPointerLeave={() => {
+        // A captured drag keeps receiving moves outside the canvas and may
+        // keep auto-panning; otherwise leaving the canvas ends the hover pan.
+        if (!dragRef.current) {
+          setCursor(null)
+          pointerRef.current = null
+        }
+      }}
     >
       <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
         {showGrid && <Grid view={view} size={size} />}
