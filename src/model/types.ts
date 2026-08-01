@@ -41,7 +41,7 @@ export interface WaterSource {
 /** The persisted design document. All coordinates in meters. */
 export interface Design {
   version: 1
-  terrain: { points: TerrainPoint[] }
+  terrain: { points: TerrainPoint[]; closed: boolean }
   sprinklers: Sprinkler[]
   pipes: Pipe[]
   zones: Zone[]
@@ -50,9 +50,22 @@ export interface Design {
 
 export const emptyDesign = (): Design => ({
   version: 1,
-  terrain: { points: [] },
+  terrain: { points: [], closed: false },
   sprinklers: [],
   pipes: [],
   zones: [],
   source: { flow: 30, pressure: 3.5 },
 })
+
+/** Parse and minimally validate a design JSON string. Throws on invalid input. */
+export function parseDesign(text: string): Design {
+  const raw = JSON.parse(text)
+  if (raw?.version !== 1 || !Array.isArray(raw?.terrain?.points)) {
+    throw new Error('Not a valid design document (expected version 1 with terrain.points)')
+  }
+  return {
+    ...emptyDesign(),
+    ...raw,
+    terrain: { points: raw.terrain.points, closed: !!raw.terrain.closed },
+  }
+}

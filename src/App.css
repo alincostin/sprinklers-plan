@@ -1,1 +1,7 @@
 #root { height: 100vh; }
+
+button { padding: 3px 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; font-size: 13px; }
+button:hover:not(:disabled) { background: #f3f4f6; }
+button:disabled { opacity: 0.45; cursor: default; }
+button.active { background: #16a34a; border-color: #16a34a; color: #fff; }
+.sep { width: 1px; height: 20px; background: #ddd; margin: 0 4px; }
