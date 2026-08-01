@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  alignmentSnap,
   distance,
   magneticSnap,
   projectOntoDirection,
   constrainToDirection,
   segmentsOf,
+  type Alignment,
   type Vec2,
 } from '../geometry/geometry'
 import { beginTransient, endTransient, redo, undo, useDesignStore } from '../state/store'
@@ -120,6 +122,7 @@ export function Canvas() {
   const [altHeld, setAltHeld] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragSnap, setDragSnap] = useState<Vec2 | null>(null)
+  const [dragAlign, setDragAlign] = useState<Alignment>({})
   const dragSnapRef = useRef<Vec2 | null>(null)
 
   const spaceRef = useRef(false)
@@ -333,29 +336,39 @@ export function Canvas() {
   /**
    * Where the next terrain point would land: Shift locks the new segment to
    * the nearest of the 8 compass directions (horizontal, vertical, or 45°
-   * diagonal); magnetic snap pulls onto the grid only when near it, and Alt
-   * disables it entirely. `snapped` reports whether the magnet moved the
-   * point (drives the click-point marker).
+   * diagonal). Without Shift, each coordinate first tries to align with an
+   * existing point (inference guide) and otherwise falls to the grid magnet;
+   * Alt disables all of it. `snapped` reports a fully locked position (drives
+   * the click-point marker); `align` carries the engaged guides.
    */
-  const nextDrawPoint = (p: Vec2, shift: boolean, alt: boolean): { point: Vec2; snapped: boolean } => {
+  const nextDrawPoint = (
+    p: Vec2,
+    shift: boolean,
+    alt: boolean,
+  ): { point: Vec2; snapped: boolean; align: Alignment } => {
     const magnet = snapActive && !alt
     const threshold = MAGNET_PX / view.scale
     const last = anchorPt
     if (!shift || !last) {
-      if (!magnet) return { point: p, snapped: false }
-      const m = magneticSnap(p, snapStep, threshold)
-      return { point: m, snapped: m.x !== p.x && m.y !== p.y }
+      const align = alt ? {} : alignmentSnap(p, pts, threshold)
+      const m = magnet ? magneticSnap(p, snapStep, threshold) : p
+      const point = {
+        x: align.x ? align.x.value : m.x,
+        y: align.y ? align.y.value : m.y,
+      }
+      const snapped = (!!align.x || m.x !== p.x) && (!!align.y || m.y !== p.y)
+      return { point, snapped, align }
     }
     const oct = ((Math.round(Math.atan2(p.y - last.y, p.x - last.x) / (Math.PI / 4)) % 8) + 8) % 8
     if (oct === 0 || oct === 4) {
       const sx = Math.round(p.x / snapStep) * snapStep
       const engaged = magnet && Math.abs(sx - p.x) <= threshold
-      return { point: { x: engaged ? sx : p.x, y: last.y }, snapped: engaged }
+      return { point: { x: engaged ? sx : p.x, y: last.y }, snapped: engaged, align: {} }
     }
     if (oct === 2 || oct === 6) {
       const sy = Math.round(p.y / snapStep) * snapStep
       const engaged = magnet && Math.abs(sy - p.y) <= threshold
-      return { point: { x: last.x, y: engaged ? sy : p.y }, snapped: engaged }
+      return { point: { x: last.x, y: engaged ? sy : p.y }, snapped: engaged, align: {} }
     }
     // 45° diagonal: project the cursor onto the diagonal ray; the magnet
     // pulls the per-axis offset onto a multiple of the grid step, which is
@@ -366,7 +379,7 @@ export function Canvas() {
     const st = Math.round(t / snapStep) * snapStep
     const engaged = magnet && Math.abs(st - t) * Math.SQRT2 <= threshold
     const u = engaged ? st : t
-    return { point: { x: last.x + u * ux, y: last.y + u * uy }, snapped: engaged }
+    return { point: { x: last.x + u * ux, y: last.y + u * uy }, snapped: engaged, align: {} }
   }
 
   /**
@@ -379,21 +392,38 @@ export function Canvas() {
     const drag = dragRef.current
     if (!drag) return
     const s = useDesignStore.getState()
-    // The point follows the cursor freely; a nearby snap intersection is
-    // only marked as a candidate (dotted circle) and applied on release.
+    // The point follows the cursor freely; a nearby landing position (point
+    // alignment and/or grid) is only marked as a candidate (dotted circle,
+    // guide lines) and applied on release.
     let target = p
     let candidate: Vec2 | null = null
+    let align: Alignment = {}
     if (shift && drag.anchor && distance(drag.origin, drag.anchor) > 0) {
       target = projectOntoDirection(p, drag.anchor, {
         x: drag.origin.x - drag.anchor.x,
         y: drag.origin.y - drag.anchor.y,
       })
-    } else if (s.snap && s.showGrid && !alt) {
-      const m = magneticSnap(p, s.snapStep, MAGNET_PX / scale)
-      if (m.x !== p.x && m.y !== p.y) candidate = m
+    } else {
+      const threshold = MAGNET_PX / scale
+      if (!alt)
+        align = alignmentSnap(
+          p,
+          s.design.terrain.points.filter((pt) => pt.id !== drag.id),
+          threshold,
+        )
+      const gridOn = s.snap && s.showGrid && !alt
+      const m = gridOn ? magneticSnap(p, s.snapStep, threshold) : p
+      if (align.x || align.y) {
+        // aligned axes take the source point's coordinate; the other axis
+        // keeps the grid magnet's value (or stays free)
+        candidate = { x: align.x ? align.x.value : m.x, y: align.y ? align.y.value : m.y }
+      } else if (gridOn && m.x !== p.x && m.y !== p.y) {
+        candidate = m
+      }
     }
     dragSnapRef.current = candidate
     setDragSnap(candidate)
+    setDragAlign(align)
     movePoint(drag.id, target.x, target.y)
   }
 
@@ -470,6 +500,7 @@ export function Canvas() {
       if (candidate) movePoint(dragRef.current.id, candidate.x, candidate.y)
       dragSnapRef.current = null
       setDragSnap(null)
+      setDragAlign({})
       dragRef.current = null
       setDraggingId(null)
       endTransient()
@@ -586,11 +617,13 @@ export function Canvas() {
 
         {/* preview segment while drawing */}
         {mode === 'draw' && !closed && cursor && (() => {
-          const { point: preview, snapped } = nearClose
-            ? { point: pts[closeIdx], snapped: false }
+          const { point: preview, snapped, align } = nearClose
+            ? { point: pts[closeIdx], snapped: false, align: {} as Alignment }
             : nextDrawPoint(cursor, shiftHeld, altHeld)
           return (
             <>
+              {align.x && <GuideLine from={align.x.source} to={preview} scale={view.scale} />}
+              {align.y && <GuideLine from={align.y.source} to={preview} scale={view.scale} />}
               {anchorPt && (
                 <>
                   <line
@@ -611,7 +644,14 @@ export function Canvas() {
           )
         })()}
 
-        {/* dotted preview of where the dragged point will land on release */}
+        {/* dotted preview of where the dragged point will land on release,
+            with inference guides explaining any point alignment */}
+        {dragSnap && dragAlign.x && (
+          <GuideLine from={dragAlign.x.source} to={dragSnap} scale={view.scale} />
+        )}
+        {dragSnap && dragAlign.y && (
+          <GuideLine from={dragAlign.y.source} to={dragSnap} scale={view.scale} />
+        )}
         {dragSnap && <SnapMarker p={dragSnap} scale={view.scale} />}
 
         {/* points */}
@@ -686,6 +726,32 @@ function neighborOf(points: TerrainPoint[], i: number, closed: boolean): Vec2 | 
   if (i > 0) return points[i - 1]
   if (closed) return points[points.length - 1]
   return points[1] ?? null
+}
+
+/** SketchUp-style inference guide: dotted amber line from the aligned source
+ * point to the snapped position, with a ring highlighting the source. */
+function GuideLine({ from, to, scale }: { from: Vec2; to: Vec2; scale: number }) {
+  return (
+    <g pointerEvents="none">
+      <line
+        x1={from.x}
+        y1={from.y}
+        x2={to.x}
+        y2={to.y}
+        stroke="#f59e0b"
+        strokeWidth={1.25 / scale}
+        strokeDasharray={`${2 / scale} ${3 / scale}`}
+      />
+      <circle
+        cx={from.x}
+        cy={from.y}
+        r={7.5 / scale}
+        fill="none"
+        stroke="#f59e0b"
+        strokeWidth={1.25 / scale}
+      />
+    </g>
+  )
 }
 
 /** Dotted circle marking a magnet-locked position (the point will land here). */

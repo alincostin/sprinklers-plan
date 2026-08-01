@@ -24,6 +24,46 @@ export const magneticSnap = (p: Vec2, gridSize: number, threshold: number): Vec2
   }
 }
 
+/** One engaged alignment axis: the snapped coordinate and the point that produced it. */
+export interface AxisAlignment {
+  value: number
+  source: Vec2
+}
+
+/** Per-axis point alignment (SketchUp-style inference). Axes are independent. */
+export interface Alignment {
+  x?: AxisAlignment
+  y?: AxisAlignment
+}
+
+/**
+ * Alignment snap against existing points, per axis: each coordinate of `p`
+ * locks to the matching coordinate of the candidate nearest on that axis,
+ * only when within `threshold`. Nearest axis-delta wins; ties break by
+ * euclidean distance to `p`. x and y may align to different points.
+ */
+export const alignmentSnap = (
+  p: Vec2,
+  candidates: readonly Vec2[],
+  threshold: number,
+): Alignment => {
+  let bx: { da: number; d2: number; source: Vec2 } | null = null
+  let by: { da: number; d2: number; source: Vec2 } | null = null
+  for (const c of candidates) {
+    const dx = Math.abs(c.x - p.x)
+    const dy = Math.abs(c.y - p.y)
+    const d2 = dx * dx + dy * dy
+    if (dx <= threshold && (!bx || dx < bx.da || (dx === bx.da && d2 < bx.d2)))
+      bx = { da: dx, d2, source: c }
+    if (dy <= threshold && (!by || dy < by.da || (dy === by.da && d2 < by.d2)))
+      by = { da: dy, d2, source: c }
+  }
+  const out: Alignment = {}
+  if (bx) out.x = { value: bx.source.x, source: bx.source }
+  if (by) out.y = { value: by.source.y, source: by.source }
+  return out
+}
+
 /**
  * Project point `p` onto the line through `origin` in direction `dir`,
  * used for Shift-constrained (keep-the-line-straight) dragging.
