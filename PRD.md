@@ -28,6 +28,7 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 
 - Click on the canvas to place polygon vertices; while drawing, a dashed preview segment follows the cursor with its live distance. Close the outline by clicking the first point or pressing Enter (needs ≥ 3 points); the app then switches to Select mode and fills the polygon. When hovering the first point to close, it fills green (same size as other points), and the preview snaps to it showing the closing segment and its distance.
 - **Shift while drawing** locks the new segment to exactly horizontal or vertical (whichever is closer to the cursor); the preview segment shows the locked position, and snap still applies to the free coordinate.
+- **Draw from either end**: an open outline extends from its last point by default. Selecting the outline's *first* point and then entering Draw mode extends from that end instead (new points prepend). The close target is always the opposite end; the preview line follows the active end.
 - **Segment length labels are always visible** on every segment and update live. While dragging a point, the labels of its two adjacent segments are highlighted.
 - **Drag points** with the mouse (Select mode). The magnetic snap (below) applies while dragging; holding **Shift** instead constrains the drag along the adjacent segment's direction so the line stays straight.
 - **Keyboard movement** of the selected point:

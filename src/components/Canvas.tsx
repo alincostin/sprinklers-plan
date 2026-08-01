@@ -52,9 +52,14 @@ export function Canvas() {
   const panRef = useRef<{ cx: number; cy: number; vx: number; vy: number } | null>(null)
   const dragRef = useRef<{ id: string; origin: Vec2; anchor: Vec2 | null } | null>(null)
 
+  const drawFrom = useDesignStore((s) => s.drawFrom)
+
   const pts = design.terrain.points
   const closed = design.terrain.closed
   const segments = segmentsOf(pts, closed)
+  // drawing extends from this end; clicking the opposite end closes the outline
+  const anchorPt = pts.length > 0 ? pts[drawFrom === 'start' ? 0 : pts.length - 1] : undefined
+  const closeIdx = drawFrom === 'start' ? pts.length - 1 : 0
 
   const toWorld = (e: { clientX: number; clientY: number }): Vec2 => {
     const rect = svgRef.current!.getBoundingClientRect()
@@ -179,7 +184,7 @@ export function Canvas() {
     if (e.button !== 0) return
     const p = toWorld(e)
     if (mode === 'draw' && !closed) {
-      if (pts.length >= 3 && distance(p, pts[0]) < CLOSE_PX / view.scale) {
+      if (pts.length >= 3 && distance(p, pts[closeIdx]) < CLOSE_PX / view.scale) {
         closeTerrain()
         return
       }
@@ -198,7 +203,7 @@ export function Canvas() {
   const nextDrawPoint = (p: Vec2, shift: boolean, alt: boolean): { point: Vec2; snapped: boolean } => {
     const magnet = snap && !alt
     const threshold = MAGNET_PX / view.scale
-    const last = pts[pts.length - 1]
+    const last = anchorPt
     if (!shift || !last) {
       if (!magnet) return { point: p, snapped: false }
       const m = magneticSnap(p, snapStep, threshold)
@@ -255,7 +260,7 @@ export function Canvas() {
     if (e.button !== 0 || spaceRef.current) return
     e.stopPropagation()
     if (mode === 'draw' && !closed) {
-      if (i === 0 && pts.length >= 3) closeTerrain()
+      if (i === closeIdx && pts.length >= 3) closeTerrain()
       return
     }
     select({ kind: 'point', id: pt.id })
@@ -272,9 +277,9 @@ export function Canvas() {
   const px = (v: number) => v / view.scale // screen-constant size in world units
   const selectedPointId = selection?.kind === 'point' ? selection.id : null
   const selectedSegment = selection?.kind === 'segment' ? selection.index : null
-  const nearFirst =
+  const nearClose =
     mode === 'draw' && !closed && cursor && pts.length >= 3
-      ? distance(cursor, pts[0]) < CLOSE_PX / view.scale
+      ? distance(cursor, pts[closeIdx]) < CLOSE_PX / view.scale
       : false
 
   const outlinePath =
@@ -350,16 +355,16 @@ export function Canvas() {
 
         {/* preview segment while drawing */}
         {mode === 'draw' && !closed && cursor && (() => {
-          const { point: preview, snapped } = nearFirst
-            ? { point: pts[0], snapped: false }
+          const { point: preview, snapped } = nearClose
+            ? { point: pts[closeIdx], snapped: false }
             : nextDrawPoint(cursor, shiftHeld, altHeld)
           return (
             <>
-              {pts.length > 0 && (
+              {anchorPt && (
                 <>
                   <line
-                    x1={pts[pts.length - 1].x}
-                    y1={pts[pts.length - 1].y}
+                    x1={anchorPt.x}
+                    y1={anchorPt.y}
                     x2={preview.x}
                     y2={preview.y}
                     stroke="#16a34a"
@@ -367,7 +372,7 @@ export function Canvas() {
                     strokeDasharray={`${px(6)} ${px(4)}`}
                     pointerEvents="none"
                   />
-                  <SegmentLabel a={pts[pts.length - 1]} b={preview} scale={view.scale} emphasized />
+                  <SegmentLabel a={anchorPt} b={preview} scale={view.scale} emphasized />
                 </>
               )}
               {snapped && <SnapMarker p={preview} scale={view.scale} />}
@@ -384,7 +389,7 @@ export function Canvas() {
         {/* points */}
         {pts.map((pt, i) => {
           const isSelected = pt.id === selectedPointId
-          const isCloseTarget = i === 0 && nearFirst
+          const isCloseTarget = i === closeIdx && nearClose
           return (
             <circle
               key={pt.id}

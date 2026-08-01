@@ -54,6 +54,8 @@ interface EditorState {
   snap: boolean
   /** grid step in meters that the magnetic snap locks onto */
   snapStep: number
+  /** which end of an open outline drawing extends from */
+  drawFrom: 'start' | 'end'
   setMode: (mode: Mode) => void
   setSnap: (snap: boolean) => void
   setSnapStep: (snapStep: number) => void
@@ -84,30 +86,49 @@ export const useDesignStore = create<EditorState>()(
       selection: null,
       snap: startPrefs.snap ?? true,
       snapStep: startPrefs.snapStep && startPrefs.snapStep > 0 ? startPrefs.snapStep : 0.5,
+      drawFrom: 'end',
 
-      setMode: (mode) => set({ mode }),
+      // Entering Draw with the first point of an open outline selected
+      // extends the outline from that end (points are prepended).
+      setMode: (mode) =>
+        set((s) => {
+          if (mode !== 'draw') return { mode }
+          const pts = s.design.terrain.points
+          const fromStart =
+            !s.design.terrain.closed &&
+            pts.length > 0 &&
+            s.selection?.kind === 'point' &&
+            s.selection.id === pts[0].id
+          return { mode, drawFrom: fromStart ? 'start' : 'end' }
+        }),
       setSnap: (snap) => set({ snap }),
       setSnapStep: (snapStep) => {
         if (snapStep > 0) set({ snapStep })
       },
       select: (selection) => set({ selection }),
       setDesign: (design) =>
-        set({ design, selection: null, mode: design.terrain.closed ? 'select' : 'draw' }),
+        set({
+          design,
+          selection: null,
+          mode: design.terrain.closed ? 'select' : 'draw',
+          drawFrom: 'end',
+        }),
       commitDesign: (design) => set({ design }),
 
       addTerrainPoint: (p) =>
-        set((s) => ({
-          design: {
-            ...s.design,
-            terrain: {
-              ...s.design.terrain,
-              points: [
-                ...s.design.terrain.points,
-                { id: crypto.randomUUID(), x: round3(p.x), y: round3(p.y) },
-              ],
+        set((s) => {
+          const pt = { id: crypto.randomUUID(), x: round3(p.x), y: round3(p.y) }
+          const pts = s.design.terrain.points
+          return {
+            design: {
+              ...s.design,
+              terrain: {
+                ...s.design.terrain,
+                points: s.drawFrom === 'start' ? [pt, ...pts] : [...pts, pt],
+              },
             },
-          },
-        })),
+          }
+        }),
 
       closeTerrain: () =>
         set((s) =>
