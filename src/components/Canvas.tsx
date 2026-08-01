@@ -14,10 +14,13 @@ import { UNITS, formatLength, fromUnit, type Unit } from '../units'
 const MAGNET_PX = 8
 const CLOSE_PX = 12
 
-/** Zoom limits: min is absolute (px per meter); max adapts to the project
- * unit so 1 unit of the active measure can always be magnified to this size. */
+/** Zoom limits: min is absolute (px per meter); max is the smaller of
+ * "1 active unit magnified to this many px" and 1:1 physical scale. */
 const ZOOM_MIN_PX_PER_M = 5
 const ZOOM_MAX_PX_PER_UNIT = 400
+/** CSS anchors 1in ≡ 96px, so this is one on-screen "physical" meter. The
+ * 1:1 cap guarantees the scale bar never shows a length larger than life. */
+const PHYSICAL_PX_PER_M = (96 / 2.54) * 100
 
 /** Point circle sizes in screen px — tweak here to resize all editor points. */
 const POINT_RADIUS = 5
@@ -88,6 +91,20 @@ export function Canvas() {
     return () => ro.disconnect()
   }, [])
 
+  // Re-clamp the zoom when the unit changes (its ceiling may be lower),
+  // anchored at the viewport center to avoid a jarring wheel-time snap.
+  useEffect(() => {
+    const maxScale = Math.min(ZOOM_MAX_PX_PER_UNIT / UNITS[unit].factor, PHYSICAL_PX_PER_M)
+    setView((v) => {
+      if (v.scale <= maxScale) return v
+      const cx = size.w / 2
+      const cy = size.h / 2
+      const wx = (cx - v.x) / v.scale
+      const wy = (cy - v.y) / v.scale
+      return { scale: maxScale, x: cx - wx * maxScale, y: cy - wy * maxScale }
+    })
+  }, [unit, size.w, size.h])
+
   // Wheel zoom anchored at the cursor (non-passive so we can preventDefault).
   useEffect(() => {
     const svg = svgRef.current!
@@ -96,8 +113,10 @@ export function Canvas() {
       const rect = svg.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
-      const maxScale =
-        ZOOM_MAX_PX_PER_UNIT / UNITS[useDesignStore.getState().design.unit].factor
+      const maxScale = Math.min(
+        ZOOM_MAX_PX_PER_UNIT / UNITS[useDesignStore.getState().design.unit].factor,
+        PHYSICAL_PX_PER_M,
+      )
       setView((v) => {
         const scale = Math.min(
           maxScale,
