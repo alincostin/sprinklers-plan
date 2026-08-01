@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   distance,
+  magneticSnap,
   projectOntoDirection,
   constrainToDirection,
   segmentsOf,
-  snapToGrid,
   type Vec2,
 } from '../geometry/geometry'
 import { beginTransient, endTransient, redo, undo, useDesignStore } from '../state/store'
 import type { TerrainPoint } from '../model/types'
 
 const SNAP_STEP = 0.5
+const MAGNET_PX = 8
 const CLOSE_PX = 12
 
 interface View {
@@ -38,6 +39,7 @@ export function Canvas() {
   const [cursor, setCursor] = useState<Vec2 | null>(null)
   const [spaceHeld, setSpaceHeld] = useState(false)
   const [shiftHeld, setShiftHeld] = useState(false)
+  const [altHeld, setAltHeld] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
 
   const spaceRef = useRef(false)
@@ -89,6 +91,7 @@ export function Canvas() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setShiftHeld(true)
+      if (e.key === 'Alt') setAltHeld(true)
       if (isEditableTarget(e)) return
       if (e.key === ' ') {
         e.preventDefault()
@@ -147,6 +150,7 @@ export function Canvas() {
     }
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setShiftHeld(false)
+      if (e.key === 'Alt') setAltHeld(false)
       if (e.key === ' ') {
         spaceRef.current = false
         setSpaceHeld(false)
@@ -173,7 +177,7 @@ export function Canvas() {
         closeTerrain()
         return
       }
-      addTerrainPoint(nextDrawPoint(p, e.shiftKey))
+      addTerrainPoint(nextDrawPoint(p, e.shiftKey, e.altKey))
     } else {
       select(null)
     }
@@ -181,15 +185,20 @@ export function Canvas() {
 
   /**
    * Where the next terrain point would land: Shift locks the new segment
-   * horizontal or vertical (whichever is closer), then snap applies to the
-   * free coordinate.
+   * horizontal or vertical (whichever is closer); magnetic snap pulls onto
+   * the grid only when near it, and Alt disables it entirely.
    */
-  const nextDrawPoint = (p: Vec2, shift: boolean): Vec2 => {
+  const nextDrawPoint = (p: Vec2, shift: boolean, alt: boolean): Vec2 => {
+    const magnet = snap && !alt
+    const threshold = MAGNET_PX / view.scale
     const last = pts[pts.length - 1]
-    if (!shift || !last) return snap ? snapToGrid(p, SNAP_STEP) : p
-    const horizontal = Math.abs(p.x - last.x) >= Math.abs(p.y - last.y)
-    const t = snap ? snapToGrid(p, SNAP_STEP) : p
-    return horizontal ? { x: t.x, y: last.y } : { x: last.x, y: t.y }
+    if (!shift || !last) return magnet ? magneticSnap(p, SNAP_STEP, threshold) : p
+    if (Math.abs(p.x - last.x) >= Math.abs(p.y - last.y)) {
+      const sx = Math.round(p.x / SNAP_STEP) * SNAP_STEP
+      return { x: magnet && Math.abs(sx - p.x) <= threshold ? sx : p.x, y: last.y }
+    }
+    const sy = Math.round(p.y / SNAP_STEP) * SNAP_STEP
+    return { x: last.x, y: magnet && Math.abs(sy - p.y) <= threshold ? sy : p.y }
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -208,8 +217,8 @@ export function Canvas() {
           x: drag.origin.x - drag.anchor.x,
           y: drag.origin.y - drag.anchor.y,
         })
-      } else if (snap) {
-        target = snapToGrid(p, SNAP_STEP)
+      } else if (snap && !e.altKey) {
+        target = magneticSnap(p, SNAP_STEP, MAGNET_PX / view.scale)
       }
       movePoint(drag.id, target.x, target.y)
     }
@@ -323,7 +332,7 @@ export function Canvas() {
 
         {/* preview segment while drawing */}
         {mode === 'draw' && !closed && pts.length > 0 && cursor && (() => {
-          const preview = nearFirst ? pts[0] : nextDrawPoint(cursor, shiftHeld)
+          const preview = nearFirst ? pts[0] : nextDrawPoint(cursor, shiftHeld, altHeld)
           return (
             <>
               <line

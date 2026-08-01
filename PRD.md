@@ -36,7 +36,8 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
   - **Delete/Backspace** removes the selected point (reopens the outline if fewer than 3 points remain); **Escape** exits Draw mode (leaving the outline open), or deselects in Select mode.
 - **Segment dimension input** (inspector): selecting a segment shows its current length; typing a new value moves the segment's end point along the segment direction to the exact dimension.
 - **Inspector** also shows: selected point's X/Y as editable inputs (commit on Enter/blur), a delete button, terrain stats (point count, perimeter, area) when nothing is selected, and contextual keyboard-shortcut hints.
-- **Grid & navigation**: 1 m grid (bold every 5 m, coarsens to 5 m when zoomed far out), snap-to-grid toggle (**0.5 m**), mouse-wheel zoom anchored at the cursor, pan via Space + drag or middle-mouse drag.
+- **Grid & navigation**: 1 m grid (bold every 5 m, coarsens to 5 m when zoomed far out), mouse-wheel zoom anchored at the cursor, pan via Space + drag or middle-mouse drag.
+- **Magnetic snap** (toggle, 0.5 m grid): dragging and drawing are fully free; each coordinate locks onto its nearest grid line only when within ~8 screen pixels of it (per-axis, so you can slide along a grid line). Holding **Alt/Option** disables even that for pixel-perfect freedom. With Shift's H/V lock active, the magnet applies to the free coordinate only.
 - Coordinates are stored with 3-decimal (mm) precision; a drag is recorded as a **single undo step**.
 
 ### 3.2 Sprinkler placement & coverage — **Planned (M3)**

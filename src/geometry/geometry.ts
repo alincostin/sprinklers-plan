@@ -12,6 +12,19 @@ export const snapToGrid = (p: Vec2, gridSize: number): Vec2 => ({
 })
 
 /**
+ * Magnetic snap, per axis: each coordinate locks onto its nearest grid line
+ * only when within `threshold` of it, and stays free otherwise.
+ */
+export const magneticSnap = (p: Vec2, gridSize: number, threshold: number): Vec2 => {
+  const sx = Math.round(p.x / gridSize) * gridSize
+  const sy = Math.round(p.y / gridSize) * gridSize
+  return {
+    x: Math.abs(sx - p.x) <= threshold ? sx : p.x,
+    y: Math.abs(sy - p.y) <= threshold ? sy : p.y,
+  }
+}
+
+/**
  * Project point `p` onto the line through `origin` in direction `dir`,
  * used for Shift-constrained (keep-the-line-straight) dragging.
  */

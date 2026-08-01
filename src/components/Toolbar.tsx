@@ -88,7 +88,10 @@ export function Toolbar() {
         Select
       </button>
 
-      <label style={{ fontSize: 13, marginLeft: 6 }}>
+      <label
+        style={{ fontSize: 13, marginLeft: 6 }}
+        title="Magnetic: points lock onto the 0.5 m grid only when close to it; hold Alt to disable while dragging or drawing"
+      >
         <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} /> Snap
         0.5 m
       </label>

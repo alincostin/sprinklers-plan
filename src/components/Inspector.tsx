@@ -28,6 +28,7 @@ export function Inspector() {
               ['Arrows', 'move 0.1 m'],
               ['Ctrl + arrows', 'move 1 m'],
               ['Shift', 'keep the line straight'],
+              ['Alt + drag', 'ignore grid snap'],
               ['Delete', 'remove point'],
             ]}
           />
