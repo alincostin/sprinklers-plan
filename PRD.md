@@ -1,5 +1,8 @@
 # PRD — Sprinkler Irrigation Planner
 
+> This document is kept in sync with the implementation. Each feature section is marked
+> **Implemented** or **Planned**; when behavior changes, this file changes in the same commit.
+
 ## 1. Overview
 
 A browser-based tool to design sprinkler irrigation systems for any terrain. The user draws the terrain outline, places sprinkler heads, groups them into zones, routes pipes, and validates the design against the water source's capacity.
@@ -19,59 +22,67 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 
 ## 3. Features
 
-### 3.1 Terrain editor
+### 3.1 Terrain editor — **Implemented**
 
-- Click on the canvas to place polygon vertices; close the polygon (click first point or press Enter) to finish the terrain outline.
-- **Drag points** with the mouse; while dragging, the adjacent segments show **live distance labels** (in meters) that update in real time.
+**Modes** (toolbar): **Draw** (add points; disabled once the outline is closed) and **Select** (edit points/segments).
+
+- Click on the canvas to place polygon vertices; while drawing, a dashed preview segment follows the cursor with its live distance. Close the outline by clicking the first point or pressing Enter (needs ≥ 3 points); the app then switches to Select mode and fills the polygon.
+- **Segment length labels are always visible** on every segment and update live. While dragging a point, the labels of its two adjacent segments are highlighted.
+- **Drag points** with the mouse (Select mode). Snap-to-grid applies while dragging; holding **Shift** instead constrains the drag along the adjacent segment's direction so the line stays straight.
 - **Keyboard movement** of the selected point:
-  - Arrow keys nudge by a small step (0.1 m).
-  - **Ctrl + arrows** = larger step (1 m) for faster movement.
-  - **Shift** constrains the movement so the line stays straight (locks the point to the direction of the adjacent segment / axis).
-- **Segment dimension input**: selecting a segment shows a numeric input with its current length; typing a new value moves the endpoint along the segment direction to match the exact dimension.
-- Grid background with snap-to-grid toggle; pan (space-drag / middle mouse) and zoom (wheel).
+  - Arrow keys nudge by 0.1 m; **Ctrl (or Cmd) + arrows** = 1 m steps.
+  - **Shift + arrows** keeps the line straight (movement projected onto the adjacent segment's direction).
+  - **Delete/Backspace** removes the selected point (reopens the outline if fewer than 3 points remain); **Escape** deselects.
+- **Segment dimension input** (inspector): selecting a segment shows its current length; typing a new value moves the segment's end point along the segment direction to the exact dimension.
+- **Inspector** also shows: selected point's X/Y as editable inputs (commit on Enter/blur), a delete button, terrain stats (point count, perimeter, area) when nothing is selected, and contextual keyboard-shortcut hints.
+- **Grid & navigation**: 1 m grid (bold every 5 m, coarsens to 5 m when zoomed far out), snap-to-grid toggle (**0.5 m**), mouse-wheel zoom anchored at the cursor, pan via Space + drag or middle-mouse drag.
+- Coordinates are stored with 3-decimal (mm) precision; a drag is recorded as a **single undo step**.
 
-### 3.2 Sprinkler placement & coverage
+### 3.2 Sprinkler placement & coverage — **Planned (M3)**
 
 - Place sprinkler heads inside the terrain.
 - Per head: position, throw radius (m), arc (90° / 180° / 270° / 360° / custom start–end angles), flow (l/min).
 - Coverage sectors rendered semi-transparently so overlaps and gaps are immediately visible.
 - Drag heads and rotate arcs directly on the canvas; edit exact values in the inspector panel.
 
-### 3.3 Zones & pipe routing
+### 3.3 Zones & pipe routing — **Planned (M4)**
 
 - Group sprinklers into irrigation zones (one valve per zone), each with a name and color; heads and coverage tint by zone color.
 - Draw polyline pipe runs on the canvas, assigned to a zone.
 - Show length per pipe run and total pipe length per zone.
 
-### 3.4 Hydraulic calculations
+### 3.4 Hydraulic calculations — **Planned (M5)**
 
 - Configure the water source: available flow (l/min) and pressure (bar).
 - Per zone: total flow = sum of its heads' flows; compare against source capacity.
 - Warn visually (zone panel + canvas badge) when a zone's demand exceeds the source flow or the heads' required pressure exceeds the available pressure.
 
-### 3.5 Configuration as JSON
+### 3.5 Configuration as JSON — **Implemented**
 
-- **Export** the design to a `.json` file.
+- **Export** the design to a `sprinkler-design.json` file.
 - **Import** a design from a `.json` file.
 - **Copy to clipboard** — so the JSON can be pasted elsewhere or embedded as the app's initial configuration.
-- **Load from clipboard/paste** as initial configuration.
-- Schema is versioned (`version` field) to allow future migrations.
+- **Paste** from clipboard to load a design.
+- **Initial configuration**: paste an exported JSON into `src/initialConfig.ts` to ship it as the app's built-in starting design.
+- Schema is versioned (`version` field); imports are validated and rejected with a message if invalid.
 
-### 3.6 Undo / Redo
+### 3.6 Undo / Redo — **Implemented**
 
-- Toolbar buttons for Undo and Redo.
+- Toolbar buttons for Undo and Redo, disabled when the respective history is empty.
 - Keyboard: Ctrl/Cmd+Z (undo), Shift+Ctrl/Cmd+Z or Ctrl/Cmd+Y (redo).
-- Every document mutation (terrain, sprinklers, pipes, zones, source) is undoable.
+- Every document mutation is undoable; ephemeral editor state (selection, mode, snap, view) is not tracked.
+- A mouse drag is grouped into one undo step; history is capped at 100 entries.
 
 ## 4. Data model
 
-All coordinates in meters, world space. Persisted shape:
+All coordinates in meters, world space (y grows downward, matching SVG). Persisted shape:
 
 ```json
 {
   "version": 1,
   "terrain": {
-    "points": [{ "id": "p1", "x": 0, "y": 0 }]
+    "points": [{ "id": "p1", "x": 0, "y": 0 }],
+    "closed": true
   },
   "sprinklers": [
     { "id": "s1", "x": 2, "y": 3, "radius": 4, "arcStart": 0, "arcEnd": 180, "flow": 10, "zoneId": "z1" }
@@ -84,6 +95,8 @@ All coordinates in meters, world space. Persisted shape:
 }
 ```
 
+`sprinklers`, `pipes`, `zones` and `source` are part of the schema now but only used from M3–M5 onward.
+
 ## 5. Non-goals (v1)
 
 - Automatic head placement / head-to-head coverage suggestions (candidate for v2).
@@ -93,8 +106,8 @@ All coordinates in meters, world space. Persisted shape:
 
 ## 6. Milestones
 
-1. **M1 — Scaffold & deploy**: Vite + React + TS scaffold, repo on GitHub, deployed to Vercel.
-2. **M2 — Terrain editor**: polygon drawing, drag with live distances, keyboard nudging (Ctrl/Shift behaviors), segment dimension input, grid/pan/zoom, undo/redo, JSON export/import/clipboard.
+1. ✅ **M1 — Scaffold & repo** (2026-08-01): Vite + React + TS scaffold, GitHub repo (`alincostin/sprinklers-plan`). Vercel connection pending (manual step in the Vercel dashboard).
+2. ✅ **M2 — Terrain editor** (2026-08-01): everything in §3.1, §3.5 and §3.6.
 3. **M3 — Sprinklers**: placement, radius/arc editing, coverage rendering.
 4. **M4 — Zones & pipes**: zone management, pipe drawing, length totals.
 5. **M5 — Hydraulics**: source configuration, per-zone flow/pressure validation and warnings.
