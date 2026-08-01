@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+const SNAP_PRESETS = [0.1, 0.25, 0.5, 1, 2, 5]
 import { useStore } from 'zustand'
 import { emptyDesign, parseDesign } from '../model/types'
 import { redo, saveDesign, undo, useDesignStore } from '../state/store'
@@ -8,7 +9,9 @@ export function Toolbar() {
   const design = useDesignStore((s) => s.design)
   const mode = useDesignStore((s) => s.mode)
   const snap = useDesignStore((s) => s.snap)
-  const { setMode, setSnap, setDesign } = useDesignStore.getState()
+  const snapStep = useDesignStore((s) => s.snapStep)
+  const { setMode, setSnap, setSnapStep, setDesign } = useDesignStore.getState()
+  const [snapStepText, setSnapStepText] = useState(() => String(snapStep))
   const canUndo = useStore(useDesignStore.temporal, (s) => s.pastStates.length > 0)
   const canRedo = useStore(useDesignStore.temporal, (s) => s.futureStates.length > 0)
 
@@ -90,11 +93,32 @@ export function Toolbar() {
 
       <label
         style={{ fontSize: 13, marginLeft: 6 }}
-        title="Magnetic: points lock onto the 0.5 m grid only when close to it; hold Alt to disable while dragging or drawing"
+        title="Magnetic: points lock onto the grid only when close to it; hold Alt to disable while dragging or drawing"
       >
         <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} /> Snap
-        0.5 m
       </label>
+      <input
+        type="number"
+        list="snap-steps"
+        value={snapStepText}
+        min={0.01}
+        step="any"
+        disabled={!snap}
+        title="Snap grid step in meters — pick a preset or type any value"
+        style={{ width: 56, fontSize: 13 }}
+        onChange={(e) => {
+          setSnapStepText(e.target.value)
+          const v = Number(e.target.value)
+          if (v > 0) setSnapStep(v)
+        }}
+        onBlur={() => setSnapStepText(String(useDesignStore.getState().snapStep))}
+      />
+      <datalist id="snap-steps">
+        {SNAP_PRESETS.map((v) => (
+          <option key={v} value={v} />
+        ))}
+      </datalist>
+      <span style={{ fontSize: 13, color: '#6b7280' }}>m</span>
 
       <span className="sep" />
       <button disabled={!canUndo} onClick={() => undo()}>

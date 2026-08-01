@@ -10,7 +10,6 @@ import {
 import { beginTransient, endTransient, redo, undo, useDesignStore } from '../state/store'
 import type { TerrainPoint } from '../model/types'
 
-const SNAP_STEP = 0.5
 const MAGNET_PX = 8
 const CLOSE_PX = 12
 
@@ -31,6 +30,7 @@ export function Canvas() {
   const mode = useDesignStore((s) => s.mode)
   const selection = useDesignStore((s) => s.selection)
   const snap = useDesignStore((s) => s.snap)
+  const snapStep = useDesignStore((s) => s.snapStep)
   const { addTerrainPoint, closeTerrain, movePoint, select } = useDesignStore.getState()
 
   const svgRef = useRef<SVGSVGElement>(null)
@@ -192,12 +192,12 @@ export function Canvas() {
     const magnet = snap && !alt
     const threshold = MAGNET_PX / view.scale
     const last = pts[pts.length - 1]
-    if (!shift || !last) return magnet ? magneticSnap(p, SNAP_STEP, threshold) : p
+    if (!shift || !last) return magnet ? magneticSnap(p, snapStep, threshold) : p
     if (Math.abs(p.x - last.x) >= Math.abs(p.y - last.y)) {
-      const sx = Math.round(p.x / SNAP_STEP) * SNAP_STEP
+      const sx = Math.round(p.x / snapStep) * snapStep
       return { x: magnet && Math.abs(sx - p.x) <= threshold ? sx : p.x, y: last.y }
     }
-    const sy = Math.round(p.y / SNAP_STEP) * SNAP_STEP
+    const sy = Math.round(p.y / snapStep) * snapStep
     return { x: last.x, y: magnet && Math.abs(sy - p.y) <= threshold ? sy : p.y }
   }
 
@@ -218,7 +218,7 @@ export function Canvas() {
           y: drag.origin.y - drag.anchor.y,
         })
       } else if (snap && !e.altKey) {
-        target = magneticSnap(p, SNAP_STEP, MAGNET_PX / view.scale)
+        target = magneticSnap(p, snapStep, MAGNET_PX / view.scale)
       }
       movePoint(drag.id, target.x, target.y)
     }

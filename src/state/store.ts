@@ -27,6 +27,21 @@ export function saveDesign(design?: Design) {
   }
 }
 
+const PREFS_KEY = 'sprinklers-plan:prefs'
+
+interface Prefs {
+  snap?: boolean
+  snapStep?: number
+}
+
+function loadPrefs(): Prefs {
+  try {
+    return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')
+  } catch {
+    return {}
+  }
+}
+
 export type Mode = 'draw' | 'select'
 export type Selection =
   | { kind: 'point'; id: string }
@@ -37,8 +52,11 @@ interface EditorState {
   mode: Mode
   selection: Selection | null
   snap: boolean
+  /** grid step in meters that the magnetic snap locks onto */
+  snapStep: number
   setMode: (mode: Mode) => void
   setSnap: (snap: boolean) => void
+  setSnapStep: (snapStep: number) => void
   select: (selection: Selection | null) => void
   setDesign: (design: Design) => void
   commitDesign: (design: Design) => void
@@ -56,6 +74,7 @@ const round3 = (v: number) => Math.round(v * 1000) / 1000
  * (undo/redo); mode/selection/snap are ephemeral editor state.
  */
 const startDesign = loadSavedDesign() ?? initialConfig ?? emptyDesign()
+const startPrefs = loadPrefs()
 
 export const useDesignStore = create<EditorState>()(
   temporal(
@@ -63,10 +82,14 @@ export const useDesignStore = create<EditorState>()(
       design: startDesign,
       mode: startDesign.terrain.closed ? 'select' : 'draw',
       selection: null,
-      snap: true,
+      snap: startPrefs.snap ?? true,
+      snapStep: startPrefs.snapStep && startPrefs.snapStep > 0 ? startPrefs.snapStep : 0.5,
 
       setMode: (mode) => set({ mode }),
       setSnap: (snap) => set({ snap }),
+      setSnapStep: (snapStep) => {
+        if (snapStep > 0) set({ snapStep })
+      },
       select: (selection) => set({ selection }),
       setDesign: (design) =>
         set({ design, selection: null, mode: design.terrain.closed ? 'select' : 'draw' }),
@@ -152,8 +175,16 @@ export const undo = () => useDesignStore.temporal.getState().undo()
 export const redo = () => useDesignStore.temporal.getState().redo()
 
 // Autosave: debounce design changes into localStorage so a reload never loses work.
+// Snap preferences persist immediately (they're tiny).
 let autosaveTimer: ReturnType<typeof setTimeout> | undefined
 useDesignStore.subscribe((state, prev) => {
+  if (state.snap !== prev.snap || state.snapStep !== prev.snapStep) {
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ snap: state.snap, snapStep: state.snapStep }))
+    } catch {
+      // storage unavailable
+    }
+  }
   if (state.design === prev.design) return
   clearTimeout(autosaveTimer)
   autosaveTimer = setTimeout(() => saveDesign(state.design), 400)
