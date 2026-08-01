@@ -13,6 +13,11 @@ import type { TerrainPoint } from '../model/types'
 const MAGNET_PX = 8
 const CLOSE_PX = 12
 
+/** Point circle sizes in screen px — tweak here to resize all editor points. */
+const POINT_RADIUS = 5
+const POINT_RADIUS_SELECTED = 6.5
+const POINT_STROKE = 2
+
 interface View {
   x: number
   y: number
@@ -385,10 +390,10 @@ export function Canvas() {
               key={pt.id}
               cx={pt.x}
               cy={pt.y}
-              r={px(isCloseTarget ? 8 : isSelected ? 6.5 : 5)}
+              r={px(isSelected ? POINT_RADIUS_SELECTED : POINT_RADIUS)}
               fill={isSelected || isCloseTarget ? '#16a34a' : '#fff'}
               stroke="#16a34a"
-              strokeWidth={px(2)}
+              strokeWidth={px(POINT_STROKE)}
               style={{ cursor: mode === 'select' ? 'move' : 'pointer' }}
               onPointerDown={(e) => onPointPointerDown(e, pt, i)}
             />
