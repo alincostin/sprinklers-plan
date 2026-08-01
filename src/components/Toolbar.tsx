@@ -94,6 +94,9 @@ export function Toolbar() {
       <button disabled={!canRedo} onClick={() => redo()}>
         ↪ Redo
       </button>
+      <button title="Zoom to fit the drawing (F)" onClick={() => useDesignStore.getState().requestFit()}>
+        ⛶ Fit
+      </button>
 
       <span className="sep" />
       <button

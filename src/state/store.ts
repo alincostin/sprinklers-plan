@@ -73,6 +73,9 @@ interface EditorState {
   /** screen calibration: actual-to-nominal CSS pixel ratio (1 = trust CSS 96dpi) */
   calibration: number
   setCalibration: (calibration: number) => void
+  /** bumping this asks the canvas to animate to the fitted+centered view */
+  fitRequestId: number
+  requestFit: () => void
   setMode: (mode: Mode) => void
   setSnap: (snap: boolean) => void
   setSnapStep: (snapStep: number) => void
@@ -118,6 +121,8 @@ export const useDesignStore = create<EditorState>()(
       setCalibration: (calibration) => {
         if (calibration > 0.3 && calibration < 3) set({ calibration })
       },
+      fitRequestId: 0,
+      requestFit: () => set((s) => ({ fitRequestId: s.fitRequestId + 1 })),
 
       // Entering Draw with the first point of an open outline selected
       // extends the outline from that end (points are prepended).
@@ -138,13 +143,16 @@ export const useDesignStore = create<EditorState>()(
       },
       setUnit: (unit) => set((s) => ({ design: { ...s.design, unit } })),
       select: (selection) => set({ selection }),
+      // Loaded designs may sit entirely outside the current view — always
+      // request a fit so the user lands looking at their drawing.
       setDesign: (design) =>
-        set({
+        set((s) => ({
           design,
           selection: null,
           mode: design.terrain.closed ? 'select' : 'draw',
           drawFrom: 'end',
-        }),
+          fitRequestId: s.fitRequestId + 1,
+        })),
       commitDesign: (design) => set({ design }),
 
       addTerrainPoint: (p) =>

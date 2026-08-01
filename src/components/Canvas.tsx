@@ -34,6 +34,12 @@ const ZOOM_MIN_PX_PER_M = 5
 const ZOOM_MAX_MAGNIFICATION = 10
 /** Margin (px, per side) kept around the terrain at maximum zoom-out. */
 const VIEWPORT_FIT_PAD_PX = 24
+/** Wheel zoom easing: fraction of the remaining distance covered per frame. */
+const ZOOM_EASE = 0.35
+/** Zoom-out convergence: below fitScale×FACTOR the view starts blending
+ * toward the fitted+centered state, by CONVERGE per wheel tick at the floor. */
+const FIT_BLEND_FACTOR = 1.4
+const FIT_CONVERGE = 0.4
 /** CSS anchors 1in ≡ 96px, so this is one on-screen "physical" meter at
  * nominal calibration. */
 const PHYSICAL_PX_PER_M = (96 / 2.54) * 100
@@ -90,19 +96,31 @@ function boundsOf(pts: readonly Vec2[]): Bounds | null {
   return { minX, minY, maxX, maxY }
 }
 
-/** Zoom-out floor: the scale at which the terrain (padded) exactly fits the
- * viewport. Falls back to the absolute floor when there is nothing to fit. */
-function contentMinZoom(w: number, h: number, pts: Vec2[]): number {
-  if (pts.length < 2) return ZOOM_MIN_PX_PER_M
-  const b = boundsOf(pts)!
+/** Translation that centers bounds `b` in a w×h viewport at scale `s`. */
+const centeredAt = (w: number, h: number, b: Bounds, s: number): { x: number; y: number } => ({
+  x: (w - (b.minX + b.maxX) * s) / 2,
+  y: (h - (b.minY + b.maxY) * s) / 2,
+})
+
+/** The fitted-and-centered view: terrain bbox (padded) exactly fits the
+ * viewport. Null when there is nothing with extent to fit. */
+function fitView(w: number, h: number, pts: readonly Vec2[]): View | null {
+  const b = boundsOf(pts)
+  if (!b || !w || !h) return null
   const bw = b.maxX - b.minX
   const bh = b.maxY - b.minY
   const pad = 2 * VIEWPORT_FIT_PAD_PX
   const fits: number[] = []
   if (bw > 0 && w > pad) fits.push((w - pad) / bw)
   if (bh > 0 && h > pad) fits.push((h - pad) / bh)
-  if (fits.length === 0) return ZOOM_MIN_PX_PER_M
-  return Math.min(...fits)
+  if (fits.length === 0) return null
+  const scale = Math.min(...fits)
+  return { scale, ...centeredAt(w, h, b, scale) }
+}
+
+const smoothstep = (t: number): number => {
+  const c = Math.min(1, Math.max(0, t))
+  return c * c * (3 - 2 * c)
 }
 
 /** World bbox the pan limit anchors to: the terrain, or the origin when the
@@ -185,6 +203,65 @@ export function Canvas() {
   const rafRef = useRef<number | null>(null)
   const lastTickRef = useRef(0)
 
+  // Eased zoom: wheel events (and Fit) retarget zoomTargetRef; a rAF loop
+  // glides the actual view toward it. Pans stay direct — easing a pan lags.
+  const zoomTargetRef = useRef<View | null>(null)
+  const zoomRafRef = useRef<number | null>(null)
+
+  const stopZoomAnim = () => {
+    if (zoomRafRef.current !== null) cancelAnimationFrame(zoomRafRef.current)
+    zoomRafRef.current = null
+    zoomTargetRef.current = null
+  }
+
+  const zoomAnimTick = () => {
+    zoomRafRef.current = null
+    const target = zoomTargetRef.current
+    if (!target) return
+    const v = viewRef.current
+    // Ease geometrically in scale (uniform pacing across zoom decades) and
+    // slide x/y linearly in s — that is exactly the cursor-anchored zoom
+    // path, so the world point under the cursor stays pinned mid-glide.
+    const ratio = target.scale / v.scale
+    const sNext =
+      Math.abs(Math.log(ratio)) < 1e-4 ? target.scale : v.scale * Math.pow(ratio, ZOOM_EASE)
+    const denom = target.scale - v.scale
+    const u = Math.abs(denom) > 1e-9 ? (sNext - v.scale) / denom : ZOOM_EASE
+    const next: View = {
+      scale: sNext,
+      x: v.x + (target.x - v.x) * u,
+      y: v.y + (target.y - v.y) * u,
+    }
+    const done =
+      Math.abs(Math.log(target.scale / next.scale)) < 0.001 &&
+      Math.abs(target.x - next.x) < 0.1 &&
+      Math.abs(target.y - next.y) < 0.1
+    let final = next
+    if (done) {
+      // land exactly on target, re-clamped in case the content changed mid-glide
+      const rect = svgRef.current?.getBoundingClientRect()
+      final = rect
+        ? clampView(target, { w: rect.width, h: rect.height }, designBounds())
+        : target
+      zoomTargetRef.current = null
+    }
+    viewRef.current = final
+    setView(final)
+    if (!done) zoomRafRef.current = requestAnimationFrame(zoomAnimTick)
+  }
+
+  const startZoomAnim = (target: View) => {
+    zoomTargetRef.current = target
+    if (zoomRafRef.current === null) zoomRafRef.current = requestAnimationFrame(zoomAnimTick)
+  }
+
+  useEffect(
+    () => () => {
+      if (zoomRafRef.current !== null) cancelAnimationFrame(zoomRafRef.current)
+    },
+    [],
+  )
+
   const drawFrom = useDesignStore((s) => s.drawFrom)
   const showScale = useDesignStore((s) => s.showScale)
   const unit = useDesignStore((s) => s.design.unit)
@@ -231,6 +308,7 @@ export function Canvas() {
   const calibration = useDesignStore((s) => s.calibration)
   useEffect(() => {
     const maxScale = PHYSICAL_PX_PER_M * calibration * ZOOM_MAX_MAGNIFICATION
+    if (zoomTargetRef.current && zoomTargetRef.current.scale > maxScale) stopZoomAnim()
     setView((v) => {
       if (v.scale <= maxScale) return v
       const cx = size.w / 2
@@ -254,30 +332,64 @@ export function Canvas() {
     setView((v) => clampView(v, size, designBounds()))
   }, [pts, size.w, size.h, view.scale])
 
+  // Fit request (toolbar button, F key, or a freshly loaded design): glide to
+  // the fitted+centered view; a gentle reset to the default view when empty.
+  const fitRequestId = useDesignStore((s) => s.fitRequestId)
+  useEffect(() => {
+    if (fitRequestId === 0) return
+    const rect = svgRef.current?.getBoundingClientRect()
+    if (!rect || !rect.width) return
+    const pts = useDesignStore.getState().design.terrain.points
+    startZoomAnim(fitView(rect.width, rect.height, pts) ?? DEFAULT_VIEW)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitRequestId])
+
   // Wheel zoom anchored at the cursor (non-passive so we can preventDefault).
   useEffect(() => {
     const svg = svgRef.current!
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
       const rect = svg.getBoundingClientRect()
+      const w = rect.width
+      const h = rect.height
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
       const st = useDesignStore.getState()
+      const pts = st.design.terrain.points
       const maxScale = PHYSICAL_PX_PER_M * st.calibration * ZOOM_MAX_MAGNIFICATION
-      const minScale = Math.min(
-        maxScale,
-        contentMinZoom(rect.width, rect.height, st.design.terrain.points),
-      )
-      setView((v) => {
-        const scale = Math.min(maxScale, Math.max(minScale, v.scale * Math.exp(-e.deltaY * 0.0015)))
-        const wx = (mx - v.x) / v.scale
-        const wy = (my - v.y) / v.scale
-        return clampView(
-          { scale, x: mx - wx * scale, y: my - wy * scale },
-          { w: rect.width, h: rect.height },
-          designBounds(),
-        )
-      })
+      const factor = Math.exp(-e.deltaY * 0.0015)
+      // compound on the in-flight target so rapid ticks accumulate correctly
+      const base = zoomTargetRef.current ?? viewRef.current
+      const fv = fitView(w, h, pts)
+
+      let scale = base.scale * factor
+      if (factor < 1) {
+        // Directional floor: never above the current scale, so a view left
+        // under the floor by content growth is tolerated instead of snapped.
+        const floor = fv ? Math.min(fv.scale, base.scale) : ZOOM_MIN_PX_PER_M
+        scale = Math.max(scale, floor)
+      }
+      scale = Math.min(scale, maxScale)
+
+      const wx = (mx - base.x) / base.scale
+      const wy = (my - base.y) / base.scale
+      let next: View = { scale, x: mx - wx * scale, y: my - wy * scale }
+
+      // Convergence: zooming out near/below the floor glides the view toward
+      // the fitted+centered state — at the floor the terrain fills the
+      // viewport, centered, approached geometrically (never a jump).
+      if (factor < 1 && fv) {
+        const b = boundsOf(pts)!
+        const band = fv.scale * (FIT_BLEND_FACTOR - 1)
+        const wgt =
+          smoothstep(band > 0 ? (fv.scale * FIT_BLEND_FACTOR - scale) / band : 1) * FIT_CONVERGE
+        if (wgt > 0) {
+          const c = centeredAt(w, h, b, scale)
+          next = { scale, x: next.x + (c.x - next.x) * wgt, y: next.y + (c.y - next.y) * wgt }
+        }
+      }
+
+      startZoomAnim(clampView(next, { w, h }, designBounds()))
     }
     svg.addEventListener('wheel', onWheel, { passive: false })
     return () => svg.removeEventListener('wheel', onWheel)
@@ -325,6 +437,10 @@ export function Canvas() {
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && s.selection?.kind === 'point') {
         s.deletePoint(s.selection.id)
+        return
+      }
+      if (e.key.toLowerCase() === 'f' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        s.requestFit()
         return
       }
 
@@ -377,7 +493,8 @@ export function Canvas() {
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button === 1 || (e.button === 0 && spaceRef.current)) {
-      panRef.current = { cx: e.clientX, cy: e.clientY, vx: view.x, vy: view.y }
+      stopZoomAnim() // a manual pan takes over from any in-flight zoom glide
+      panRef.current = { cx: e.clientX, cy: e.clientY, vx: viewRef.current.x, vy: viewRef.current.y }
       svgRef.current!.setPointerCapture(e.pointerId)
       return
     }
@@ -627,6 +744,9 @@ export function Canvas() {
         background: '#fdfdfd',
         cursor: spaceHeld ? 'grab' : mode === 'draw' && !closed ? 'crosshair' : 'default',
         touchAction: 'none',
+        // labels and scale-bar text are annotations, not selectable content
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
