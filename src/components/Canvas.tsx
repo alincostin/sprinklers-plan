@@ -414,6 +414,8 @@ function SegmentLabel({
 }
 
 function Grid({ view, size }: { view: View; size: { w: number; h: number } }) {
+  const snap = useDesignStore((s) => s.snap)
+  const snapStep = useDesignStore((s) => s.snapStep)
   if (!size.w || !size.h) return null
   const minX = (0 - view.x) / view.scale
   const maxX = (size.w - view.x) / view.scale
@@ -421,6 +423,22 @@ function Grid({ view, size }: { view: View; size: { w: number; h: number } }) {
   const maxY = (size.h - view.y) / view.scale
   const step = view.scale < 14 ? 5 : 1
   const lines: React.ReactElement[] = []
+
+  // Snap layer: faint green lines at the snap step, only when legible on screen.
+  if (snap && snapStep * view.scale >= 8) {
+    const stroke = 'rgba(22,163,74,0.16)'
+    const w = 1 / view.scale
+    for (let k = Math.floor(minX / snapStep); k * snapStep <= maxX; k++) {
+      lines.push(
+        <line key={`sv${k}`} x1={k * snapStep} y1={minY} x2={k * snapStep} y2={maxY} stroke={stroke} strokeWidth={w} />,
+      )
+    }
+    for (let k = Math.floor(minY / snapStep); k * snapStep <= maxY; k++) {
+      lines.push(
+        <line key={`sh${k}`} x1={minX} y1={k * snapStep} x2={maxX} y2={k * snapStep} stroke={stroke} strokeWidth={w} />,
+      )
+    }
+  }
   for (let x = Math.floor(minX / step) * step; x <= maxX; x += step) {
     lines.push(
       <line
