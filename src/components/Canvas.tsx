@@ -19,11 +19,15 @@ const EDGE_PAN_MAX_SPEED = 900 // px/sec at full penetration
 /** Snap-grid lines render only when their on-screen spacing is at least this. */
 const SNAP_GRID_MIN_PX = 8
 
-/** Zoom limits are unit-independent: an absolute floor (px per meter) and a
- * ceiling of ZOOM_MAX_MAGNIFICATION × physical 1:1 scale (screen-calibrated).
- * Past 1:1 the scale bar shows a magnification badge instead of forbidding it. */
+/** Zoom limits are unit-independent: the floor is content-based (you cannot
+ * zoom out past the terrain filling the viewport, padded); the absolute
+ * px-per-meter floor applies only while nothing is drawn. Ceiling is
+ * ZOOM_MAX_MAGNIFICATION × physical 1:1 scale (screen-calibrated); past 1:1
+ * the scale bar shows a magnification badge instead of forbidding it. */
 const ZOOM_MIN_PX_PER_M = 5
 const ZOOM_MAX_MAGNIFICATION = 10
+/** Margin (px, per side) kept around the terrain at maximum zoom-out. */
+const VIEWPORT_FIT_PAD_PX = 24
 /** CSS anchors 1in ≡ 96px, so this is one on-screen "physical" meter at
  * nominal calibration. */
 const PHYSICAL_PX_PER_M = (96 / 2.54) * 100
@@ -46,12 +50,7 @@ const DEFAULT_VIEW: View = { x: 80, y: 80, scale: 40 }
 function loadView(): View {
   try {
     const v = JSON.parse(localStorage.getItem(VIEW_KEY) ?? '')
-    if (
-      Number.isFinite(v?.x) &&
-      Number.isFinite(v?.y) &&
-      Number.isFinite(v?.scale) &&
-      v.scale >= ZOOM_MIN_PX_PER_M
-    ) {
+    if (Number.isFinite(v?.x) && Number.isFinite(v?.y) && Number.isFinite(v?.scale) && v.scale > 0) {
       // over-ceiling scales are re-clamped by the calibration effect on mount
       return { x: v.x, y: v.y, scale: v.scale }
     }
@@ -59,6 +58,30 @@ function loadView(): View {
     // fall through to default
   }
   return DEFAULT_VIEW
+}
+
+/** Zoom-out floor: the scale at which the terrain (padded) exactly fits the
+ * viewport. Falls back to the absolute floor when there is nothing to fit. */
+function contentMinZoom(w: number, h: number, pts: Vec2[]): number {
+  if (pts.length < 2) return ZOOM_MIN_PX_PER_M
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x
+    if (p.x > maxX) maxX = p.x
+    if (p.y < minY) minY = p.y
+    if (p.y > maxY) maxY = p.y
+  }
+  const bw = maxX - minX
+  const bh = maxY - minY
+  const pad = 2 * VIEWPORT_FIT_PAD_PX
+  const fits: number[] = []
+  if (bw > 0 && w > pad) fits.push((w - pad) / bw)
+  if (bh > 0 && h > pad) fits.push((h - pad) / bh)
+  if (fits.length === 0) return ZOOM_MIN_PX_PER_M
+  return Math.min(...fits)
 }
 
 const isEditableTarget = (e: KeyboardEvent) => {
@@ -179,13 +202,14 @@ export function Canvas() {
       const rect = svg.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
-      const maxScale =
-        PHYSICAL_PX_PER_M * useDesignStore.getState().calibration * ZOOM_MAX_MAGNIFICATION
+      const st = useDesignStore.getState()
+      const maxScale = PHYSICAL_PX_PER_M * st.calibration * ZOOM_MAX_MAGNIFICATION
+      const minScale = Math.min(
+        maxScale,
+        contentMinZoom(rect.width, rect.height, st.design.terrain.points),
+      )
       setView((v) => {
-        const scale = Math.min(
-          maxScale,
-          Math.max(ZOOM_MIN_PX_PER_M, v.scale * Math.exp(-e.deltaY * 0.0015)),
-        )
+        const scale = Math.min(maxScale, Math.max(minScale, v.scale * Math.exp(-e.deltaY * 0.0015)))
         const wx = (mx - v.x) / v.scale
         const wy = (my - v.y) / v.scale
         return { scale, x: mx - wx * scale, y: my - wy * scale }
