@@ -48,6 +48,9 @@ export function Canvas() {
   const selection = useDesignStore((s) => s.selection)
   const snap = useDesignStore((s) => s.snap)
   const snapStep = useDesignStore((s) => s.snapStep)
+  const showGrid = useDesignStore((s) => s.showGrid)
+  // hiding the grid deactivates snapping — there is nothing visible to snap to
+  const snapActive = snap && showGrid
   const { addTerrainPoint, closeTerrain, movePoint, select } = useDesignStore.getState()
 
   const svgRef = useRef<SVGSVGElement>(null)
@@ -237,7 +240,7 @@ export function Canvas() {
    * reports whether the magnet moved the point (drives the click-point marker).
    */
   const nextDrawPoint = (p: Vec2, shift: boolean, alt: boolean): { point: Vec2; snapped: boolean } => {
-    const magnet = snap && !alt
+    const magnet = snapActive && !alt
     const threshold = MAGNET_PX / view.scale
     const last = anchorPt
     if (!shift || !last) {
@@ -274,7 +277,7 @@ export function Canvas() {
           x: drag.origin.x - drag.anchor.x,
           y: drag.origin.y - drag.anchor.y,
         })
-      } else if (snap && !e.altKey) {
+      } else if (snapActive && !e.altKey) {
         const m = magneticSnap(p, snapStep, MAGNET_PX / view.scale)
         if (m.x !== p.x && m.y !== p.y) candidate = m
       }
@@ -345,7 +348,7 @@ export function Canvas() {
       onPointerLeave={() => setCursor(null)}
     >
       <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
-        <Grid view={view} size={size} />
+        {showGrid && <Grid view={view} size={size} />}
 
         {closed && outlinePath && <path d={outlinePath} fill="rgba(34,197,94,0.10)" stroke="none" />}
         {outlinePath && (

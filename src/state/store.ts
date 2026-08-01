@@ -34,6 +34,7 @@ interface Prefs {
   snap?: boolean
   snapStep?: number
   showScale?: boolean
+  showGrid?: boolean
   calibration?: number
 }
 
@@ -62,6 +63,9 @@ interface EditorState {
   /** show the map-style scale bar on the canvas */
   showScale: boolean
   setShowScale: (showScale: boolean) => void
+  /** show the canvas grid; hiding it also deactivates snapping */
+  showGrid: boolean
+  setShowGrid: (showGrid: boolean) => void
   /** screen calibration: actual-to-nominal CSS pixel ratio (1 = trust CSS 96dpi) */
   calibration: number
   setCalibration: (calibration: number) => void
@@ -99,6 +103,8 @@ export const useDesignStore = create<EditorState>()(
       drawFrom: 'end',
       showScale: startPrefs.showScale ?? true,
       setShowScale: (showScale) => set({ showScale }),
+      showGrid: startPrefs.showGrid ?? true,
+      setShowGrid: (showGrid) => set({ showGrid }),
       calibration:
         startPrefs.calibration && startPrefs.calibration > 0.3 && startPrefs.calibration < 3
           ? startPrefs.calibration
@@ -223,6 +229,7 @@ useDesignStore.subscribe((state, prev) => {
     state.snap !== prev.snap ||
     state.snapStep !== prev.snapStep ||
     state.showScale !== prev.showScale ||
+    state.showGrid !== prev.showGrid ||
     state.calibration !== prev.calibration
   ) {
     try {
@@ -232,6 +239,7 @@ useDesignStore.subscribe((state, prev) => {
           snap: state.snap,
           snapStep: state.snapStep,
           showScale: state.showScale,
+          showGrid: state.showGrid,
           calibration: state.calibration,
         }),
       )

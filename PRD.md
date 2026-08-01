@@ -26,7 +26,7 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 
 **Modes** (toolbar): **Draw** (add points; disabled once the outline is closed) and **Select** (edit points/segments).
 
-**Layout**: toolbar (modes, undo/redo, Save/New/Export/Import/Copy/Paste) on top; right sidebar with a **Project panel** (Unit — §3.6, Grid size, Snap to grid, Scale bar toggle, Screen calibration — in that order) above the selection **Inspector**.
+**Layout**: toolbar (modes, undo/redo, Save/New/Export/Import/Copy/Paste) on top; right sidebar with a **Project panel** above the selection **Inspector**. Panel order: Unit (§3.6), **Grid** toggle with its dependents **Size** and **Snap** nested/indented beneath it (grayed and disabled while Grid is off — the indentation itself communicates the dependency), Scale bar toggle, Screen calibration.
 
 - Click on the canvas to place polygon vertices; while drawing, a dashed preview segment follows the cursor with its live distance. Close the outline by clicking the opposite end point (the first point when drawing forward) or pressing Enter (needs ≥ 3 points); the app then switches to Select mode and fills the polygon. When hovering the close-target point, it fills green (same size as other points), and the preview snaps to it showing the closing segment and its distance.
 - **Shift while drawing** locks the new segment to exactly horizontal or vertical (whichever is closer to the cursor); the preview segment shows the locked position, and snap still applies to the free coordinate.
@@ -39,7 +39,7 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
   - **Delete/Backspace** removes the selected point (reopens the outline if fewer than 3 points remain); **Escape** exits Draw mode (leaving the outline open), or deselects in Select mode.
 - **Segment dimension input** (inspector): selecting a segment shows its current length; typing a new value moves the segment's end point along the segment direction to the exact dimension.
 - **Inspector** also shows: selected point's X/Y as editable inputs (commit on Enter/blur), a delete button, terrain stats (point count, perimeter, area) when nothing is selected, and contextual keyboard-shortcut hints.
-- **Grid & navigation**: 1 m grid (bold every 5 m, coarsens to 5 m when zoomed far out), mouse-wheel zoom anchored at the cursor, pan via Space + drag or middle-mouse drag.
+- **Grid & navigation**: 1 m grid (bold every 5 m, coarsens to 5 m when zoomed far out), mouse-wheel zoom anchored at the cursor, pan via Space + drag or middle-mouse drag. The grid can be **hidden entirely** (Project panel → Grid); hiding it also deactivates snapping — there is nothing visible to snap to — and its dependent controls gray out. Visibility persists as a browser preference.
 - **Zoom limits are unit-independent**: floor at 5 px/m (terrain overview), ceiling at **10× physical 1:1 scale** (CSS anchor 1in ≡ 96px, multiplied by the screen calibration) in every unit. Switching units never changes the zoom. Past life-size the scale bar doesn't pretend otherwise — it shows an amber **magnification badge** (e.g. "× 2.5") whenever displayed lengths exceed their real on-screen size.
 - **Screen calibration** (Project panel → Calibrate…): an overlay shows a credit-card outline (ISO ID-1, 85.60 × 53.98 mm); the user holds a real card to the screen and adjusts a slider (70–150%) until they match, making 1:1 zoom a true 1:1 on that monitor. The factor persists as a browser preference (per device, not per design) and shows next to the button when ≠ 100%.
 - **Scale bar** (toggleable in the Project panel, on by default, persisted as a preference): a map-style bar in the canvas' bottom-left corner showing the largest "nice" round length (1 / 2 / 5 × 10ⁿ in the project unit) that fits ~150 px; it updates in real time as the zoom changes and hides when no nice length fits.
@@ -100,7 +100,7 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 
 - Toolbar buttons for Undo and Redo, disabled when the respective history is empty.
 - Keyboard: Ctrl/Cmd+Z (undo), Shift+Ctrl/Cmd+Z or Ctrl/Cmd+Y (redo).
-- Every document mutation is undoable; ephemeral editor state (selection, mode, view) and browser preferences (snap, snap step, scale bar, calibration) are not tracked.
+- Every document mutation is undoable; ephemeral editor state (selection, mode, view) and browser preferences (grid visibility, snap, grid size, scale bar, calibration) are not tracked.
 - A mouse drag is grouped into one undo step; history is capped at 100 entries.
 
 ## 4. Data model

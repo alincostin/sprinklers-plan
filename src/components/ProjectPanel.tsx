@@ -10,14 +10,23 @@ const row: React.CSSProperties = {
   marginBottom: 8,
 }
 
+/** Child options render indented under their parent toggle; when the parent
+ * is off they stay visible but grayed, so the dependency is self-evident. */
+const childRow = (enabled: boolean): React.CSSProperties => ({
+  ...row,
+  marginLeft: 18,
+  opacity: enabled ? 1 : 0.45,
+})
+
 /** Project configuration: unit of measure and snap settings. */
 export function ProjectPanel() {
   const unit = useDesignStore((s) => s.design.unit)
   const snap = useDesignStore((s) => s.snap)
   const snapStep = useDesignStore((s) => s.snapStep)
   const showScale = useDesignStore((s) => s.showScale)
+  const showGrid = useDesignStore((s) => s.showGrid)
   const calibration = useDesignStore((s) => s.calibration)
-  const { setUnit, setSnap, setSnapStep, setShowScale } = useDesignStore.getState()
+  const { setUnit, setSnap, setSnapStep, setShowScale, setShowGrid } = useDesignStore.getState()
   const [stepText, setStepText] = useState(() => String(inputValue(snapStep, unit)))
   const [calibrating, setCalibrating] = useState(false)
 
@@ -45,14 +54,26 @@ export function ProjectPanel() {
         </select>
       </label>
 
-      <label style={row} title={`Grid size in ${UNITS[unit].label} — pick a preset or type any value`}>
-        <span style={{ width: 76 }}>Grid size</span>
+      <label style={row} title="Show the canvas grid; hiding it also turns snapping off">
+        <span style={{ width: 76 }}>Grid</span>
+        <input
+          type="checkbox"
+          checked={showGrid}
+          onChange={(e) => setShowGrid(e.target.checked)}
+        />
+      </label>
+
+      <label
+        style={childRow(showGrid && snap)}
+        title={`Grid size in ${UNITS[unit].label} — pick a preset or type any value`}
+      >
+        <span style={{ width: 58 }}>Size</span>
         <input
           type="text"
           inputMode="decimal"
           list="snap-steps"
           value={stepText}
-          disabled={!snap}
+          disabled={!showGrid || !snap}
           style={{ width: 72, fontSize: 13 }}
           onChange={(e) => {
             setStepText(e.target.value)
@@ -70,11 +91,16 @@ export function ProjectPanel() {
       </label>
 
       <label
-        style={row}
+        style={childRow(showGrid)}
         title="Magnetic: points lock onto the grid only when close to it; hold Alt to disable while dragging or drawing"
       >
-        <span style={{ width: 76 }}>Snap to grid</span>
-        <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />
+        <span style={{ width: 58 }}>Snap</span>
+        <input
+          type="checkbox"
+          checked={snap}
+          disabled={!showGrid}
+          onChange={(e) => setSnap(e.target.checked)}
+        />
       </label>
 
       <label style={row} title="Map-style scale bar in the canvas corner, updating with zoom">
