@@ -9,7 +9,7 @@ import {
 } from '../geometry/geometry'
 import { beginTransient, endTransient, redo, undo, useDesignStore } from '../state/store'
 import type { TerrainPoint } from '../model/types'
-import { UNITS, formatLength, fromUnit } from '../units'
+import { UNITS, formatLength, fromUnit, type Unit } from '../units'
 
 const MAGNET_PX = 8
 const CLOSE_PX = 12
@@ -54,6 +54,8 @@ export function Canvas() {
   const dragRef = useRef<{ id: string; origin: Vec2; anchor: Vec2 | null } | null>(null)
 
   const drawFrom = useDesignStore((s) => s.drawFrom)
+  const showScale = useDesignStore((s) => s.showScale)
+  const unit = useDesignStore((s) => s.design.unit)
 
   const pts = design.terrain.points
   const closed = design.terrain.closed
@@ -407,7 +409,43 @@ export function Canvas() {
           )
         })}
       </g>
+
+      {showScale && size.h > 0 && <ScaleBar scale={view.scale} height={size.h} unit={unit} />}
     </svg>
+  )
+}
+
+/**
+ * Map-style scale bar (bottom-left, screen space): picks the largest "nice"
+ * length (1/2/5 × 10ⁿ in the project unit) that fits ~150 px at the current
+ * zoom, so it updates live as the user zooms.
+ */
+function ScaleBar({ scale, height, unit }: { scale: number; height: number; unit: Unit }) {
+  const u = UNITS[unit]
+  const pxPerUnit = u.factor * scale
+  let best: { v: number; w: number } | null = null
+  for (let k = -3; k <= 5; k++) {
+    for (const m of [1, 2, 5]) {
+      const v = m * 10 ** k
+      const w = v * pxPerUnit
+      if (w <= 150 && (!best || w > best.w)) best = { v, w }
+    }
+  }
+  if (!best || best.w < 20) return null
+  const x = 16
+  const y = height - 22
+  return (
+    <g pointerEvents="none" fontSize={11} fill="#374151">
+      <rect x={x} y={y} width={best.w / 2} height={5} fill="#374151" />
+      <rect x={x + best.w / 2} y={y} width={best.w / 2} height={5} fill="#fff" />
+      <rect x={x} y={y} width={best.w} height={5} fill="none" stroke="#374151" strokeWidth={1} />
+      <text x={x} y={y - 5}>
+        0
+      </text>
+      <text x={x + best.w} y={y - 5} textAnchor="end">
+        {+best.v.toFixed(3)} {u.label}
+      </text>
+    </g>
   )
 }
 

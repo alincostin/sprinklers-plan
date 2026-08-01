@@ -15,7 +15,8 @@ export function ProjectPanel() {
   const unit = useDesignStore((s) => s.design.unit)
   const snap = useDesignStore((s) => s.snap)
   const snapStep = useDesignStore((s) => s.snapStep)
-  const { setUnit, setSnap, setSnapStep } = useDesignStore.getState()
+  const showScale = useDesignStore((s) => s.showScale)
+  const { setUnit, setSnap, setSnapStep, setShowScale } = useDesignStore.getState()
   const [stepText, setStepText] = useState(() => String(inputValue(snapStep, unit)))
 
   // re-express the snap step when the project unit changes
@@ -72,6 +73,15 @@ export function ProjectPanel() {
           ))}
         </datalist>
         <span style={{ color: '#6b7280' }}>{UNITS[unit].label}</span>
+      </label>
+
+      <label style={row} title="Map-style scale bar in the canvas corner, updating with zoom">
+        <span style={{ width: 64 }}>Scale bar</span>
+        <input
+          type="checkbox"
+          checked={showScale}
+          onChange={(e) => setShowScale(e.target.checked)}
+        />
       </label>
     </section>
   )

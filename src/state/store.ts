@@ -33,6 +33,7 @@ const PREFS_KEY = 'sprinklers-plan:prefs'
 interface Prefs {
   snap?: boolean
   snapStep?: number
+  showScale?: boolean
 }
 
 function loadPrefs(): Prefs {
@@ -57,6 +58,9 @@ interface EditorState {
   snapStep: number
   /** which end of an open outline drawing extends from */
   drawFrom: 'start' | 'end'
+  /** show the map-style scale bar on the canvas */
+  showScale: boolean
+  setShowScale: (showScale: boolean) => void
   setMode: (mode: Mode) => void
   setSnap: (snap: boolean) => void
   setSnapStep: (snapStep: number) => void
@@ -89,6 +93,8 @@ export const useDesignStore = create<EditorState>()(
       snap: startPrefs.snap ?? true,
       snapStep: startPrefs.snapStep && startPrefs.snapStep > 0 ? startPrefs.snapStep : 0.5,
       drawFrom: 'end',
+      showScale: startPrefs.showScale ?? true,
+      setShowScale: (showScale) => set({ showScale }),
 
       // Entering Draw with the first point of an open outline selected
       // extends the outline from that end (points are prepended).
@@ -202,9 +208,16 @@ export const redo = () => useDesignStore.temporal.getState().redo()
 // Snap preferences persist immediately (they're tiny).
 let autosaveTimer: ReturnType<typeof setTimeout> | undefined
 useDesignStore.subscribe((state, prev) => {
-  if (state.snap !== prev.snap || state.snapStep !== prev.snapStep) {
+  if (
+    state.snap !== prev.snap ||
+    state.snapStep !== prev.snapStep ||
+    state.showScale !== prev.showScale
+  ) {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ snap: state.snap, snapStep: state.snapStep }))
+      localStorage.setItem(
+        PREFS_KEY,
+        JSON.stringify({ snap: state.snap, snapStep: state.snapStep, showScale: state.showScale }),
+      )
     } catch {
       // storage unavailable
     }
