@@ -14,22 +14,14 @@ import { UNITS, formatLength, fromUnit, type Unit } from '../units'
 const MAGNET_PX = 8
 const CLOSE_PX = 12
 
-/** Zoom limits: min is absolute (px per meter). Max: a unit larger than a
- * centimeter may reach 1:1 physical scale; a smaller unit (mm) may be
- * magnified until 1 unit spans one physical centimeter (10x for mm) — all
- * within the 400 px-per-unit ceiling and scaled by the screen calibration. */
+/** Zoom limits are unit-independent: an absolute floor (px per meter) and a
+ * ceiling of ZOOM_MAX_MAGNIFICATION × physical 1:1 scale (screen-calibrated).
+ * Past 1:1 the scale bar shows a magnification badge instead of forbidding it. */
 const ZOOM_MIN_PX_PER_M = 5
-const ZOOM_MAX_PX_PER_UNIT = 400
+const ZOOM_MAX_MAGNIFICATION = 10
 /** CSS anchors 1in ≡ 96px, so this is one on-screen "physical" meter at
  * nominal calibration. */
 const PHYSICAL_PX_PER_M = (96 / 2.54) * 100
-
-/** Max zoom (px per meter) for a unit, honoring the user's screen calibration. */
-function maxZoomFor(unitFactor: number, calibration: number): number {
-  const physical = PHYSICAL_PX_PER_M * calibration
-  const oneUnitPerPhysicalCm = (physical * 0.01) / unitFactor
-  return Math.min(ZOOM_MAX_PX_PER_UNIT / unitFactor, Math.max(physical, oneUnitPerPhysicalCm))
-}
 
 /** Point circle sizes in screen px — tweak here to resize all editor points. */
 const POINT_RADIUS = 5
@@ -100,11 +92,11 @@ export function Canvas() {
     return () => ro.disconnect()
   }, [])
 
-  // Re-clamp the zoom when the unit or calibration changes (the ceiling may
-  // be lower), anchored at the viewport center to avoid a jarring snap.
+  // Re-clamp the zoom if a calibration change lowers the ceiling, anchored
+  // at the viewport center to avoid a jarring snap on the next wheel tick.
   const calibration = useDesignStore((s) => s.calibration)
   useEffect(() => {
-    const maxScale = maxZoomFor(UNITS[unit].factor, calibration)
+    const maxScale = PHYSICAL_PX_PER_M * calibration * ZOOM_MAX_MAGNIFICATION
     setView((v) => {
       if (v.scale <= maxScale) return v
       const cx = size.w / 2
@@ -113,7 +105,7 @@ export function Canvas() {
       const wy = (cy - v.y) / v.scale
       return { scale: maxScale, x: cx - wx * maxScale, y: cy - wy * maxScale }
     })
-  }, [unit, calibration, size.w, size.h])
+  }, [calibration, size.w, size.h])
 
   // Wheel zoom anchored at the cursor (non-passive so we can preventDefault).
   useEffect(() => {
@@ -123,8 +115,8 @@ export function Canvas() {
       const rect = svg.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
-      const s = useDesignStore.getState()
-      const maxScale = maxZoomFor(UNITS[s.design.unit].factor, s.calibration)
+      const maxScale =
+        PHYSICAL_PX_PER_M * useDesignStore.getState().calibration * ZOOM_MAX_MAGNIFICATION
       setView((v) => {
         const scale = Math.min(
           maxScale,
@@ -461,6 +453,7 @@ export function Canvas() {
  * zoom, so it updates live as the user zooms.
  */
 function ScaleBar({ scale, height, unit }: { scale: number; height: number; unit: Unit }) {
+  const calibration = useDesignStore((s) => s.calibration)
   const u = UNITS[unit]
   const pxPerUnit = u.factor * scale
   let best: { v: number; w: number } | null = null
@@ -474,6 +467,8 @@ function ScaleBar({ scale, height, unit }: { scale: number; height: number; unit
   if (!best || best.w < 20) return null
   const x = 16
   const y = height - 22
+  // Past physical 1:1 the bar overstates real-world size — say so explicitly.
+  const magnification = scale / (PHYSICAL_PX_PER_M * calibration)
   return (
     <g pointerEvents="none" fontSize={11} fill="#374151">
       <rect x={x} y={y} width={best.w / 2} height={5} fill="#374151" />
@@ -485,6 +480,11 @@ function ScaleBar({ scale, height, unit }: { scale: number; height: number; unit
       <text x={x + best.w} y={y - 5} textAnchor="end">
         {+best.v.toFixed(3)} {u.label}
       </text>
+      {magnification >= 1.05 && (
+        <text x={x + best.w + 8} y={y + 5} fill="#b45309" fontWeight={600}>
+          × {+magnification.toFixed(1)}
+        </text>
+      )}
     </g>
   )
 }
