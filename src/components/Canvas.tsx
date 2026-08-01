@@ -47,7 +47,8 @@ export function Canvas() {
   const [shiftHeld, setShiftHeld] = useState(false)
   const [altHeld, setAltHeld] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
-  const [dragSnapped, setDragSnapped] = useState(false)
+  const [dragSnap, setDragSnap] = useState<Vec2 | null>(null)
+  const dragSnapRef = useRef<Vec2 | null>(null)
 
   const spaceRef = useRef(false)
   const panRef = useRef<{ cx: number; cy: number; vx: number; vy: number } | null>(null)
@@ -233,19 +234,21 @@ export function Canvas() {
     setCursor(p)
     const drag = dragRef.current
     if (drag) {
+      // The point follows the cursor freely; a nearby snap intersection is
+      // only marked as a candidate (dotted circle) and applied on release.
       let target = p
-      let onSnapPosition = false
+      let candidate: Vec2 | null = null
       if (e.shiftKey && drag.anchor && distance(drag.origin, drag.anchor) > 0) {
         target = projectOntoDirection(p, drag.anchor, {
           x: drag.origin.x - drag.anchor.x,
           y: drag.origin.y - drag.anchor.y,
         })
       } else if (snap && !e.altKey) {
-        target = magneticSnap(p, snapStep, MAGNET_PX / view.scale)
-        // marker only when fully locked onto a grid intersection
-        onSnapPosition = target.x !== p.x && target.y !== p.y
+        const m = magneticSnap(p, snapStep, MAGNET_PX / view.scale)
+        if (m.x !== p.x && m.y !== p.y) candidate = m
       }
-      setDragSnapped(onSnapPosition)
+      dragSnapRef.current = candidate
+      setDragSnap(candidate)
       movePoint(drag.id, target.x, target.y)
     }
   }
@@ -253,9 +256,12 @@ export function Canvas() {
   const onPointerUp = () => {
     panRef.current = null
     if (dragRef.current) {
+      const candidate = dragSnapRef.current
+      if (candidate) movePoint(dragRef.current.id, candidate.x, candidate.y)
+      dragSnapRef.current = null
+      setDragSnap(null)
       dragRef.current = null
       setDraggingId(null)
-      setDragSnapped(false)
       endTransient()
     }
   }
@@ -384,11 +390,8 @@ export function Canvas() {
           )
         })()}
 
-        {/* snap indicator around a magnet-locked dragged point */}
-        {draggingId && dragSnapped && (() => {
-          const pt = pts.find((p) => p.id === draggingId)
-          return pt ? <SnapMarker p={pt} scale={view.scale} /> : null
-        })()}
+        {/* dotted preview of where the dragged point will land on release */}
+        {dragSnap && <SnapMarker p={dragSnap} scale={view.scale} />}
 
         {/* points */}
         {pts.map((pt, i) => {
