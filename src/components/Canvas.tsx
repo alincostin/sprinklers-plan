@@ -18,6 +18,10 @@ const CLOSE_PX = 12
 /** Edge auto-pan (draw hover / point drag): hot band width and top speed. */
 const EDGE_PAN_ZONE_PX = 36
 const EDGE_PAN_MAX_SPEED = 900 // px/sec at full penetration
+/** Pan limit: the design's bbox (the origin before any point exists) must
+ * keep at least this much of itself inside the viewport — the view
+ * hard-stops rather than wandering into empty space. */
+const PAN_LIMIT_MARGIN_PX = 48
 /** Snap-grid lines render only when their on-screen spacing is at least this. */
 const SNAP_GRID_MIN_PX = 8
 
@@ -53,7 +57,9 @@ function loadView(): View {
   try {
     const v = JSON.parse(localStorage.getItem(VIEW_KEY) ?? '')
     if (Number.isFinite(v?.x) && Number.isFinite(v?.y) && Number.isFinite(v?.scale) && v.scale > 0) {
-      // over-ceiling scales are re-clamped by the calibration effect on mount
+      // over-ceiling scales are re-clamped by the calibration effect on
+      // mount; off-limits positions by the pan-limit effect once the
+      // viewport size is known
       return { x: v.x, y: v.y, scale: v.scale }
     }
   } catch {
@@ -62,28 +68,65 @@ function loadView(): View {
   return DEFAULT_VIEW
 }
 
-/** Zoom-out floor: the scale at which the terrain (padded) exactly fits the
- * viewport. Falls back to the absolute floor when there is nothing to fit. */
-function contentMinZoom(w: number, h: number, pts: Vec2[]): number {
-  if (pts.length < 2) return ZOOM_MIN_PX_PER_M
-  let minX = Infinity
-  let maxX = -Infinity
-  let minY = Infinity
-  let maxY = -Infinity
+interface Bounds {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+
+function boundsOf(pts: readonly Vec2[]): Bounds | null {
+  if (pts.length === 0) return null
+  let minX = pts[0].x
+  let maxX = pts[0].x
+  let minY = pts[0].y
+  let maxY = pts[0].y
   for (const p of pts) {
     if (p.x < minX) minX = p.x
     if (p.x > maxX) maxX = p.x
     if (p.y < minY) minY = p.y
     if (p.y > maxY) maxY = p.y
   }
-  const bw = maxX - minX
-  const bh = maxY - minY
+  return { minX, minY, maxX, maxY }
+}
+
+/** Zoom-out floor: the scale at which the terrain (padded) exactly fits the
+ * viewport. Falls back to the absolute floor when there is nothing to fit. */
+function contentMinZoom(w: number, h: number, pts: Vec2[]): number {
+  if (pts.length < 2) return ZOOM_MIN_PX_PER_M
+  const b = boundsOf(pts)!
+  const bw = b.maxX - b.minX
+  const bh = b.maxY - b.minY
   const pad = 2 * VIEWPORT_FIT_PAD_PX
   const fits: number[] = []
   if (bw > 0 && w > pad) fits.push((w - pad) / bw)
   if (bh > 0 && h > pad) fits.push((h - pad) / bh)
   if (fits.length === 0) return ZOOM_MIN_PX_PER_M
   return Math.min(...fits)
+}
+
+/** World bbox the pan limit anchors to: the terrain, or the origin when the
+ * design is empty so an empty canvas still cannot wander. Reads getState()
+ * so mount-once closures (wheel listener, rAF tick) stay fresh. */
+function designBounds(): Bounds {
+  const pts = useDesignStore.getState().design.terrain.points
+  return boundsOf(pts) ?? { minX: 0, minY: 0, maxX: 0, maxY: 0 }
+}
+
+/** Clamp x/y (never scale) so the bbox keeps ≥ margin px on screen.
+ * screenX = worldX·s + x ⇒ the bbox spans [minX·s+x, maxX·s+x]:
+ *   right edge ≥ M  ⇒  x ≥ M − maxX·s
+ *   left edge ≤ w−M ⇒  x ≤ w − M − minX·s
+ * The effective margin shrinks to half the viewport so the range is never
+ * empty. Returns `v` itself when already inside (lets setView bail out). */
+function clampView(v: View, size: { w: number; h: number }, b: Bounds): View {
+  if (!size.w || !size.h) return v // pre-ResizeObserver render — size unknown
+  const mw = Math.min(PAN_LIMIT_MARGIN_PX, size.w / 2)
+  const mh = Math.min(PAN_LIMIT_MARGIN_PX, size.h / 2)
+  const s = v.scale
+  const x = Math.max(mw - b.maxX * s, Math.min(size.w - mw - b.minX * s, v.x))
+  const y = Math.max(mh - b.maxY * s, Math.min(size.h - mh - b.minY * s, v.y))
+  return x === v.x && y === v.y ? v : { ...v, x, y }
 }
 
 const isEditableTarget = (e: KeyboardEvent) => {
@@ -109,6 +152,7 @@ export function Canvas() {
   const snap = useDesignStore((s) => s.snap)
   const snapStep = useDesignStore((s) => s.snapStep)
   const showGrid = useDesignStore((s) => s.showGrid)
+  const alignAid = useDesignStore((s) => s.alignAid)
   // hiding the grid deactivates snapping — there is nothing visible to snap to
   const snapActive = snap && showGrid
   const { addTerrainPoint, closeTerrain, movePoint, select } = useDesignStore.getState()
@@ -193,9 +237,22 @@ export function Canvas() {
       const cy = size.h / 2
       const wx = (cx - v.x) / v.scale
       const wy = (cy - v.y) / v.scale
-      return { scale: maxScale, x: cx - wx * maxScale, y: cy - wy * maxScale }
+      return clampView(
+        { scale: maxScale, x: cx - wx * maxScale, y: cy - wy * maxScale },
+        size,
+        designBounds(),
+      )
     })
   }, [calibration, size.w, size.h])
+
+  // Pan limit, reactive side: re-clamp when the reachable area changes under
+  // a fixed view — the bbox shrinks (point delete, undo/redo, drag inward) or
+  // is swapped (Import/Paste/New), the viewport resizes, or the scale changes.
+  // Also sanitizes a stale persisted view once the ResizeObserver reports a
+  // real size (clampView is a no-op while size is 0×0).
+  useEffect(() => {
+    setView((v) => clampView(v, size, designBounds()))
+  }, [pts, size.w, size.h, view.scale])
 
   // Wheel zoom anchored at the cursor (non-passive so we can preventDefault).
   useEffect(() => {
@@ -215,7 +272,11 @@ export function Canvas() {
         const scale = Math.min(maxScale, Math.max(minScale, v.scale * Math.exp(-e.deltaY * 0.0015)))
         const wx = (mx - v.x) / v.scale
         const wy = (my - v.y) / v.scale
-        return { scale, x: mx - wx * scale, y: my - wy * scale }
+        return clampView(
+          { scale, x: mx - wx * scale, y: my - wy * scale },
+          { w: rect.width, h: rect.height },
+          designBounds(),
+        )
       })
     }
     svg.addEventListener('wheel', onWheel, { passive: false })
@@ -350,7 +411,7 @@ export function Canvas() {
     const threshold = MAGNET_PX / view.scale
     const last = anchorPt
     if (!shift || !last) {
-      const align = alt ? {} : alignmentSnap(p, pts, threshold)
+      const align = alt || !alignAid ? {} : alignmentSnap(p, pts, threshold)
       const m = magnet ? magneticSnap(p, snapStep, threshold) : p
       const point = {
         x: align.x ? align.x.value : m.x,
@@ -405,7 +466,7 @@ export function Canvas() {
       })
     } else {
       const threshold = MAGNET_PX / scale
-      if (!alt)
+      if (!alt && s.alignAid)
         align = alignmentSnap(
           p,
           s.design.terrain.points.filter((pt) => pt.id !== drag.id),
@@ -449,19 +510,27 @@ export function Canvas() {
     const dt = Math.min((t - lastTickRef.current) / 1000, 0.05) // clamp tab-switch gaps
     lastTickRef.current = t
     const v = viewRef.current
-    const next = { ...v, x: v.x - vx * dt, y: v.y - vy * dt }
-    viewRef.current = next
-    setView(next)
-    // The world position under the (edge-clamped) frozen pointer changed:
-    // refresh the draw preview and, when dragging, the point itself.
-    const cx = Math.min(Math.max(ptr.clientX, rect.left), rect.right)
-    const cy = Math.min(Math.max(ptr.clientY, rect.top), rect.bottom)
-    const p = {
-      x: (cx - rect.left - next.x) / next.scale,
-      y: (cy - rect.top - next.y) / next.scale,
+    const next = clampView(
+      { ...v, x: v.x - vx * dt, y: v.y - vy * dt },
+      { w: rect.width, h: rect.height },
+      designBounds(),
+    )
+    if (next.x !== v.x || next.y !== v.y) {
+      viewRef.current = next
+      setView(next)
+      // The world position under the (edge-clamped) frozen pointer changed:
+      // refresh the draw preview and, when dragging, the point itself.
+      const cx = Math.min(Math.max(ptr.clientX, rect.left), rect.right)
+      const cy = Math.min(Math.max(ptr.clientY, rect.top), rect.bottom)
+      const p = {
+        x: (cx - rect.left - next.x) / next.scale,
+        y: (cy - rect.top - next.y) / next.scale,
+      }
+      setCursor(p)
+      if (dragRef.current) applyDragMove(p, modRef.current.shift, modRef.current.alt, next.scale)
     }
-    setCursor(p)
-    if (dragRef.current) applyDragMove(p, modRef.current.shift, modRef.current.alt, next.scale)
+    // Reschedule even when fully clamped: placing a point near the edge grows
+    // the bbox without a pointer move, and panning must resume next frame.
     rafRef.current = requestAnimationFrame(autoPanTick)
   }
 
@@ -484,7 +553,13 @@ export function Canvas() {
     modRef.current = { shift: e.shiftKey, alt: e.altKey }
     if (panRef.current) {
       const pan = panRef.current
-      setView((v) => ({ ...v, x: pan.vx + e.clientX - pan.cx, y: pan.vy + e.clientY - pan.cy }))
+      setView((v) =>
+        clampView(
+          { ...v, x: pan.vx + e.clientX - pan.cx, y: pan.vy + e.clientY - pan.cy },
+          size,
+          designBounds(),
+        ),
+      )
       return
     }
     const p = toWorld(e)

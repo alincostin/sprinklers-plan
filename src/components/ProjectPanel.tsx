@@ -25,8 +25,10 @@ export function ProjectPanel() {
   const snapStep = useDesignStore((s) => s.snapStep)
   const showScale = useDesignStore((s) => s.showScale)
   const showGrid = useDesignStore((s) => s.showGrid)
+  const alignAid = useDesignStore((s) => s.alignAid)
   const calibration = useDesignStore((s) => s.calibration)
-  const { setUnit, setSnap, setSnapStep, setShowScale, setShowGrid } = useDesignStore.getState()
+  const { setUnit, setSnap, setSnapStep, setShowScale, setShowGrid, setAlignAid } =
+    useDesignStore.getState()
   const [stepText, setStepText] = useState(() => String(inputValue(snapStep, unit)))
   const [calibrating, setCalibrating] = useState(false)
 
@@ -100,6 +102,18 @@ export function ProjectPanel() {
           checked={snap}
           disabled={!showGrid}
           onChange={(e) => setSnap(e.target.checked)}
+        />
+      </label>
+
+      <label
+        style={row}
+        title="Snap level or plumb with existing points, shown as amber guide lines; hold Alt to bypass"
+      >
+        <span style={{ width: 76 }}>Align aid</span>
+        <input
+          type="checkbox"
+          checked={alignAid}
+          onChange={(e) => setAlignAid(e.target.checked)}
         />
       </label>
 

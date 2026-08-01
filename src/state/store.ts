@@ -35,6 +35,7 @@ interface Prefs {
   snapStep?: number
   showScale?: boolean
   showGrid?: boolean
+  alignAid?: boolean
   calibration?: number
 }
 
@@ -66,6 +67,9 @@ interface EditorState {
   /** show the canvas grid; hiding it also deactivates snapping */
   showGrid: boolean
   setShowGrid: (showGrid: boolean) => void
+  /** alignment guides: snap level/plumb with existing points (inference) */
+  alignAid: boolean
+  setAlignAid: (alignAid: boolean) => void
   /** screen calibration: actual-to-nominal CSS pixel ratio (1 = trust CSS 96dpi) */
   calibration: number
   setCalibration: (calibration: number) => void
@@ -105,6 +109,8 @@ export const useDesignStore = create<EditorState>()(
       setShowScale: (showScale) => set({ showScale }),
       showGrid: startPrefs.showGrid ?? true,
       setShowGrid: (showGrid) => set({ showGrid }),
+      alignAid: startPrefs.alignAid ?? true,
+      setAlignAid: (alignAid) => set({ alignAid }),
       calibration:
         startPrefs.calibration && startPrefs.calibration > 0.3 && startPrefs.calibration < 3
           ? startPrefs.calibration
@@ -230,6 +236,7 @@ useDesignStore.subscribe((state, prev) => {
     state.snapStep !== prev.snapStep ||
     state.showScale !== prev.showScale ||
     state.showGrid !== prev.showGrid ||
+    state.alignAid !== prev.alignAid ||
     state.calibration !== prev.calibration
   ) {
     try {
@@ -240,6 +247,7 @@ useDesignStore.subscribe((state, prev) => {
           snapStep: state.snapStep,
           showScale: state.showScale,
           showGrid: state.showGrid,
+          alignAid: state.alignAid,
           calibration: state.calibration,
         }),
       )
