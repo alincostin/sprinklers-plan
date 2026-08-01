@@ -18,7 +18,7 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 | Framework | React 19 + Vite + TypeScript | Simple static SPA; fast dev loop; deploys to Vercel with zero config |
 | Rendering | SVG | Points/segments are real DOM elements — simple hit-testing, dragging, hover states, crisp at any zoom |
 | State | zustand + zundo | Small store with temporal middleware giving undo/redo for free |
-| Persistence | JSON (file export/import + clipboard) | Versioned schema, portable, embeddable as initial config |
+| Persistence | localStorage autosave + JSON (file export/import + clipboard) | Work survives reloads; versioned schema, portable, embeddable as initial config |
 
 ## 3. Features
 
@@ -26,10 +26,10 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 
 **Modes** (toolbar): **Draw** (add points; disabled once the outline is closed) and **Select** (edit points/segments).
 
-- Click on the canvas to place polygon vertices; while drawing, a dashed preview segment follows the cursor with its live distance. Close the outline by clicking the first point or pressing Enter (needs ≥ 3 points); the app then switches to Select mode and fills the polygon. When hovering the first point to close, the preview snaps to it and shows the closing segment and its distance.
+- Click on the canvas to place polygon vertices; while drawing, a dashed preview segment follows the cursor with its live distance. Close the outline by clicking the first point or pressing Enter (needs ≥ 3 points); the app then switches to Select mode and fills the polygon. When hovering the first point to close, it fills green (same size as other points), and the preview snaps to it showing the closing segment and its distance.
 - **Shift while drawing** locks the new segment to exactly horizontal or vertical (whichever is closer to the cursor); the preview segment shows the locked position, and snap still applies to the free coordinate.
 - **Segment length labels are always visible** on every segment and update live. While dragging a point, the labels of its two adjacent segments are highlighted.
-- **Drag points** with the mouse (Select mode). Snap-to-grid applies while dragging; holding **Shift** instead constrains the drag along the adjacent segment's direction so the line stays straight.
+- **Drag points** with the mouse (Select mode). The magnetic snap (below) applies while dragging; holding **Shift** instead constrains the drag along the adjacent segment's direction so the line stays straight.
 - **Keyboard movement** of the selected point:
   - Arrow keys nudge by 0.1 m; **Ctrl (or Cmd) + arrows** = 1 m steps.
   - **Shift + arrows** keeps the line straight (movement projected onto the adjacent segment's direction).
@@ -73,6 +73,7 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 - **Paste** from clipboard to load a design.
 - **Initial configuration**: paste an exported JSON into `src/initialConfig.ts` to ship it as the app's built-in starting design.
 - Schema is versioned (`version` field); imports are validated and rejected with a message if invalid.
+- Actions give brief status feedback in the toolbar ("Saved to this browser", "Copied to clipboard", "Loaded from …", validation errors).
 
 ### 3.6 Undo / Redo — **Implemented**
 
