@@ -17,7 +17,7 @@ export function Inspector() {
   const segment = selection?.kind === 'segment' ? segments[selection.index] : undefined
 
   return (
-    <aside style={{ width: 260, borderLeft: '1px solid #ddd', padding: 12, overflowY: 'auto' }}>
+    <div style={{ flex: 1, padding: 12, overflowY: 'auto' }}>
       {point ? (
         <>
           <h3 style={{ marginTop: 0 }}>Point</h3>
@@ -90,7 +90,7 @@ export function Inspector() {
           />
         </>
       )}
-    </aside>
+    </div>
   )
 }
 

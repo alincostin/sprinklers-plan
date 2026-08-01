@@ -26,6 +26,8 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 
 **Modes** (toolbar): **Draw** (add points; disabled once the outline is closed) and **Select** (edit points/segments).
 
+**Layout**: toolbar (modes, undo/redo, Save/New/Export/Import/Copy/Paste) on top; right sidebar with a **Project panel** (unit of measure, snap on/off, snap step — §3.6) above the selection **Inspector**.
+
 - Click on the canvas to place polygon vertices; while drawing, a dashed preview segment follows the cursor with its live distance. Close the outline by clicking the first point or pressing Enter (needs ≥ 3 points); the app then switches to Select mode and fills the polygon. When hovering the first point to close, it fills green (same size as other points), and the preview snaps to it showing the closing segment and its distance.
 - **Shift while drawing** locks the new segment to exactly horizontal or vertical (whichever is closer to the cursor); the preview segment shows the locked position, and snap still applies to the free coordinate.
 - **Draw from either end**: an open outline extends from its last point by default. Selecting the outline's *first* point and then entering Draw mode extends from that end instead (new points prepend). The close target is always the opposite end; the preview line follows the active end.
@@ -39,7 +41,7 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 - **Inspector** also shows: selected point's X/Y as editable inputs (commit on Enter/blur), a delete button, terrain stats (point count, perimeter, area) when nothing is selected, and contextual keyboard-shortcut hints.
 - **Grid & navigation**: 1 m grid (bold every 5 m, coarsens to 5 m when zoomed far out), mouse-wheel zoom anchored at the cursor, pan via Space + drag or middle-mouse drag.
 - **Magnetic snap** (toggle): dragging and drawing are fully free; each coordinate locks onto its nearest grid line only when within ~8 screen pixels of it (per-axis, so you can slide along a grid line). Holding **Alt/Option** disables even that for pixel-perfect freedom. With Shift's H/V lock active, the magnet applies to the free coordinate only.
-- **Snap step is customizable**: a toolbar input with a preset dropdown that also accepts any typed value; presets and display follow the project unit (for meters: 0.1 / 0.25 / 0.5 / 1 / 2 / 5; default 0.5 m). Snap on/off and the step persist in the browser as preferences.
+- **Snap step is customizable**: an input in the Project panel with a preset dropdown that also accepts any typed value (disabled while snap is off); presets and display follow the project unit (for meters: 0.1 / 0.25 / 0.5 / 1 / 2 / 5; default 0.5 m). Snap on/off and the step persist in the browser as preferences.
 - **Snap grid layer**: when snap is on, faint green lines are drawn at the snap step under the gray meter grid — but only while their on-screen spacing is ≥ 8 px, so a fine step doesn't flood a zoomed-out view. What you see in green is exactly where the magnet locks.
 - **Snap click-point marker**: a small dotted green circle marks the landing position only when it is a true snap position — both coordinates locked onto the snap grid (or, with Shift's H/V lock, the free coordinate locked). Sliding along a single grid line shows no marker. Applies while drawing (including the first point) and while dragging.
 - Coordinates are stored with 3-decimal (mm) precision; a drag is recorded as a **single undo step**.
@@ -78,7 +80,7 @@ A browser-based tool to design sprinkler irrigation systems for any terrain. The
 
 ### 3.6 Units — **Implemented**
 
-- **Project unit of measure** selectable in the toolbar: mm, cm, m, in, ft (default m). It is part of the design document (travels with export/import, undoable).
+- **Project unit of measure** selectable in the Project panel (right sidebar): mm, cm, m, in, ft (default m). It is part of the design document (travels with export/import, undoable).
 - Once set, **everything displays and edits in that unit**: segment labels, the dimension input, point X/Y inputs, perimeter, snap-step input and its presets, and keyboard-shortcut hints.
 - **Input parsing** converts back: typing 250 with unit cm moves the point to 2.5 m internally. Geometry is always stored in meters, so switching units never changes the data.
 - **Areas** render in m² for metric units and ft² for imperial ones.

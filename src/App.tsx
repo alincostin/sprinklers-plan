@@ -1,5 +1,6 @@
 import { Canvas } from './components/Canvas'
 import { Inspector } from './components/Inspector'
+import { ProjectPanel } from './components/ProjectPanel'
 import { Toolbar } from './components/Toolbar'
 import './App.css'
 
@@ -11,7 +12,18 @@ function App() {
         <div style={{ flex: 1 }}>
           <Canvas />
         </div>
-        <Inspector />
+        <aside
+          style={{
+            width: 260,
+            borderLeft: '1px solid #ddd',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+          }}
+        >
+          <ProjectPanel />
+          <Inspector />
+        </aside>
       </div>
     </div>
   )
