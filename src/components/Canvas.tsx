@@ -13,6 +13,9 @@ import { UNITS, formatLength, fromUnit, type Unit } from '../units'
 
 const MAGNET_PX = 8
 const CLOSE_PX = 12
+/** Edge auto-pan (draw hover / point drag): hot band width and top speed. */
+const EDGE_PAN_ZONE_PX = 36
+const EDGE_PAN_MAX_SPEED = 900 // px/sec at full penetration
 /** Snap-grid lines render only when their on-screen spacing is at least this. */
 const SNAP_GRID_MIN_PX = 8
 
@@ -41,6 +44,16 @@ const isEditableTarget = (e: KeyboardEvent) => {
   return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
 }
 
+/** −1..1 penetration toward an edge (left/top negative); clamps to full speed
+ * past the edge, where a captured drag still reports positions. */
+const edgeFactor = (pos: number, min: number, max: number): number => {
+  if (pos < min + EDGE_PAN_ZONE_PX)
+    return -Math.min(1, (min + EDGE_PAN_ZONE_PX - pos) / EDGE_PAN_ZONE_PX)
+  if (pos > max - EDGE_PAN_ZONE_PX)
+    return Math.min(1, (pos - (max - EDGE_PAN_ZONE_PX)) / EDGE_PAN_ZONE_PX)
+  return 0
+}
+
 /** SVG drawing surface: grid, terrain outline, points, labels, interactions. */
 export function Canvas() {
   const design = useDesignStore((s) => s.design)
@@ -67,6 +80,18 @@ export function Canvas() {
   const spaceRef = useRef(false)
   const panRef = useRef<{ cx: number; cy: number; vx: number; vy: number } | null>(null)
   const dragRef = useRef<{ id: string; origin: Vec2; anchor: Vec2 | null } | null>(null)
+
+  // Edge auto-pan runs on a rAF loop where React state would be stale, so it
+  // works off refs: the current view, the last raw pointer position, and the
+  // modifier keys (the pointer is frozen while the view slides under it).
+  const viewRef = useRef(view)
+  useEffect(() => {
+    viewRef.current = view
+  }, [view])
+  const pointerRef = useRef<{ clientX: number; clientY: number } | null>(null)
+  const modRef = useRef({ shift: false, alt: false })
+  const rafRef = useRef<number | null>(null)
+  const lastTickRef = useRef(0)
 
   const drawFrom = useDesignStore((s) => s.drawFrom)
   const showScale = useDesignStore((s) => s.showScale)
@@ -139,8 +164,14 @@ export function Canvas() {
   // Global keyboard: space (pan), arrows (nudge), Enter/Escape/Delete, undo/redo.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') setShiftHeld(true)
-      if (e.key === 'Alt') setAltHeld(true)
+      if (e.key === 'Shift') {
+        setShiftHeld(true)
+        modRef.current.shift = true
+      }
+      if (e.key === 'Alt') {
+        setAltHeld(true)
+        modRef.current.alt = true
+      }
       if (isEditableTarget(e)) return
       if (e.key === ' ') {
         e.preventDefault()
@@ -199,11 +230,19 @@ export function Canvas() {
       }
     }
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') setShiftHeld(false)
-      if (e.key === 'Alt') setAltHeld(false)
+      if (e.key === 'Shift') {
+        setShiftHeld(false)
+        modRef.current.shift = false
+      }
+      if (e.key === 'Alt') {
+        setAltHeld(false)
+        modRef.current.alt = false
+      }
       if (e.key === ' ') {
         spaceRef.current = false
         setSpaceHeld(false)
+        // resume edge auto-pan if the cursor is parked in the hot band
+        scheduleAutoPan()
       }
     }
     document.addEventListener('keydown', onKeyDown)
@@ -234,10 +273,11 @@ export function Canvas() {
   }
 
   /**
-   * Where the next terrain point would land: Shift locks the new segment
-   * horizontal or vertical (whichever is closer); magnetic snap pulls onto
-   * the grid only when near it, and Alt disables it entirely. `snapped`
-   * reports whether the magnet moved the point (drives the click-point marker).
+   * Where the next terrain point would land: Shift locks the new segment to
+   * the nearest of the 8 compass directions (horizontal, vertical, or 45°
+   * diagonal); magnetic snap pulls onto the grid only when near it, and Alt
+   * disables it entirely. `snapped` reports whether the magnet moved the
+   * point (drives the click-point marker).
    */
   const nextDrawPoint = (p: Vec2, shift: boolean, alt: boolean): { point: Vec2; snapped: boolean } => {
     const magnet = snapActive && !alt
@@ -248,14 +288,27 @@ export function Canvas() {
       const m = magneticSnap(p, snapStep, threshold)
       return { point: m, snapped: m.x !== p.x && m.y !== p.y }
     }
-    if (Math.abs(p.x - last.x) >= Math.abs(p.y - last.y)) {
+    const oct = ((Math.round(Math.atan2(p.y - last.y, p.x - last.x) / (Math.PI / 4)) % 8) + 8) % 8
+    if (oct === 0 || oct === 4) {
       const sx = Math.round(p.x / snapStep) * snapStep
       const engaged = magnet && Math.abs(sx - p.x) <= threshold
       return { point: { x: engaged ? sx : p.x, y: last.y }, snapped: engaged }
     }
-    const sy = Math.round(p.y / snapStep) * snapStep
-    const engaged = magnet && Math.abs(sy - p.y) <= threshold
-    return { point: { x: last.x, y: engaged ? sy : p.y }, snapped: engaged }
+    if (oct === 2 || oct === 6) {
+      const sy = Math.round(p.y / snapStep) * snapStep
+      const engaged = magnet && Math.abs(sy - p.y) <= threshold
+      return { point: { x: last.x, y: engaged ? sy : p.y }, snapped: engaged }
+    }
+    // 45° diagonal: project the cursor onto the diagonal ray; the magnet
+    // pulls the per-axis offset onto a multiple of the grid step, which is
+    // a snap-grid intersection whenever the anchor sits on the grid.
+    const ux = oct === 1 || oct === 7 ? 1 : -1
+    const uy = oct === 1 || oct === 3 ? 1 : -1
+    const t = ((p.x - last.x) * ux + (p.y - last.y) * uy) / 2
+    const st = Math.round(t / snapStep) * snapStep
+    const engaged = magnet && Math.abs(st - t) * Math.SQRT2 <= threshold
+    const u = engaged ? st : t
+    return { point: { x: last.x + u * ux, y: last.y + u * uy }, snapped: engaged }
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
