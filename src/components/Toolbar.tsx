@@ -98,14 +98,13 @@ export function Toolbar() {
         <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} /> Snap
       </label>
       <input
-        type="number"
+        type="text"
+        inputMode="decimal"
         list="snap-steps"
         value={snapStepText}
-        min={0.01}
-        step="any"
         disabled={!snap}
         title="Snap grid step in meters — pick a preset or type any value"
-        style={{ width: 56, fontSize: 13 }}
+        style={{ width: 80, fontSize: 13 }}
         onChange={(e) => {
           setSnapStepText(e.target.value)
           const v = Number(e.target.value)
